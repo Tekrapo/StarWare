@@ -24,9 +24,6 @@ if not LP then
 end
 local Cam = workspace.CurrentCamera
 
--- ============================================================
--- UI loader
--- ============================================================
 local OrionLib = loadstring(game:HttpGet('https://raw.githubusercontent.com/Qanuir/orion-ui/refs/heads/main/source.lua'))()
 local function MakeNotif(name, content, dur)
     pcall(function()
@@ -34,12 +31,8 @@ local function MakeNotif(name, content, dur)
     end)
 end
 
--- ============================================================
--- helpers
--- ============================================================
 local function safe_destroy(i) if i and typeof(i)=="Instance" and i.Parent then pcall(function() i:Destroy() end) end end
 local function safe_disconnect(c) if c then pcall(function() c:Disconnect() end) end end
-local function LT(c) return Color3.new(math.min(1,c.R*1.4),math.min(1,c.G*1.4),math.min(1,c.B*1.4)) end
 
 -- ============================================================
 -- state
@@ -50,7 +43,8 @@ local SA = { enabled=true, part="Torso", quiet=true, wb=true, wbTemp=nil, antiJu
 local SA_hist, SA_phase = {}, {}
 local KS = { enabled=false }
 local KA = { on=false, all=false, dist=30, last=0, stabRate=0.03 }
-local BT = { on=false, model=nil, cache={}, ping=0.15, hist={}, cap=256, first=1, n=0, lastping=0 }
+local BT = { on=false, model=nil, cache={}, ping=0.15, hist={}, cap=256, first=1, n=0, lastping=0,
+    color=Color3.fromRGB(170,100,255) }
 
 local autograb_on=false
 local grab_round_mod=nil
@@ -64,18 +58,17 @@ local moveConns = { infJump=nil, noclip=nil, nc={} }
 local flyConn, spinConn, antiJumpConn
 
 local TROLL = { flinging=false }
-
--- небольшая таблица для функциональных флагов, не визуалов
 local fl = { antifling=false, noafk=false }
 
 -- ============================================================
--- PULSE VISUALS (integrated)
+-- PULSE VISUALS
 -- ============================================================
 local V = {}
 _G.PulseV = V
 
--- 1. WEATHER
-V.Weather = {on=false, mode="Fog", _conn=nil}
+-- 1. WEATHER (с реальным дождём и снегом)
+V.Weather = {on=false, mode="Fog", _conn=nil, _fxPart=nil, _emitters={}}
+
 local function clearForeign()
     for _, o in ipairs(L:GetChildren()) do
         if (o:IsA("Atmosphere") or o:IsA("Clouds") or o:IsA("Sky"))
@@ -93,6 +86,98 @@ local function restoreForeign()
         end
     end
 end
+
+local function destroyWeatherFX()
+    for _, e in ipairs(V.Weather._emitters) do pcall(function() e:Destroy() end) end
+    V.Weather._emitters = {}
+    safe_destroy(V.Weather._fxPart)
+    V.Weather._fxPart = nil
+end
+
+local function makeWeatherFX(kind)
+    destroyWeatherFX()
+    local part = Instance.new("Part")
+    part.Name = "PulseWeatherFX"
+    part.Size = Vector3.new(200, 1, 200)
+    part.Anchored = true; part.CanCollide = false; part.CanQuery = false; part.CanTouch = false
+    part.CastShadow = false; part.Transparency = 1
+    part.Parent = workspace
+    V.Weather._fxPart = part
+
+    local function emit(cfg)
+        local pe = Instance.new("ParticleEmitter")
+        pe.Texture = cfg.tex or "rbxasset://textures/particles/sparkles_main.dds"
+        pe.Rate = cfg.rate or 200
+        pe.Lifetime = cfg.life
+        pe.Speed = cfg.speed
+        pe.SpreadAngle = cfg.spread or Vector2.new(20,20)
+        pe.Rotation = cfg.rot or NumberRange.new(0,360)
+        pe.RotSpeed = cfg.rotspd or NumberRange.new(-30,30)
+        pe.Size = cfg.size
+        pe.Transparency = cfg.trans
+        pe.Color = cfg.color
+        pe.LightEmission = cfg.le or 0.8
+        pe.LightInfluence = 0
+        pe.Acceleration = cfg.acc or Vector3.new(0,-10,0)
+        pe.EmissionDirection = Enum.NormalId.Bottom
+        pe.VelocityInheritance = 0
+        pe.Drag = cfg.drag or 0
+        pe.ZOffset = cfg.zoff or 2
+        pe.Parent = part
+        table.insert(V.Weather._emitters, pe)
+        return pe
+    end
+
+    if kind == "Rain" then
+        emit({
+            tex = "rbxasset://textures/particles/sparkles_main.dds",
+            rate = 500,
+            life = NumberRange.new(0.35, 0.55),
+            speed = NumberRange.new(120, 180),
+            spread = Vector2.new(0, 0),
+            rot = NumberRange.new(90, 90),
+            rotspd = NumberRange.new(0, 0),
+            size = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 0.18),
+                NumberSequenceKeypoint.new(1, 0.05),
+            }),
+            trans = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 0.35),
+                NumberSequenceKeypoint.new(1, 0.7),
+            }),
+            color = ColorSequence.new(Color3.fromRGB(180, 210, 255)),
+            le = 0.2,
+            acc = Vector3.new(0, -200, 0),
+            drag = 0,
+            zoff = 4,
+        })
+    elseif kind == "Snow" then
+        emit({
+            tex = "rbxasset://textures/particles/sparkles_main.dds",
+            rate = 220,
+            life = NumberRange.new(3, 5),
+            speed = NumberRange.new(4, 8),
+            spread = Vector2.new(35, 35),
+            rot = NumberRange.new(0, 360),
+            rotspd = NumberRange.new(-30, 30),
+            size = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 0.3),
+                NumberSequenceKeypoint.new(0.5, 0.55),
+                NumberSequenceKeypoint.new(1, 0.1),
+            }),
+            trans = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 0.05),
+                NumberSequenceKeypoint.new(1, 0.55),
+            }),
+            color = ColorSequence.new(Color3.fromRGB(255, 255, 255)),
+            le = 0.8,
+            acc = Vector3.new(0, -3, 0),
+            drag = 0.5,
+            zoff = 4,
+        })
+    end
+end
+
 function V.Weather.set(mode)
     clearForeign()
     for _, n in ipairs({"PulseAtmosphere","PulseClouds","PulseSky"}) do
@@ -101,40 +186,47 @@ function V.Weather.set(mode)
     local atm = Instance.new("Atmosphere"); atm.Name="PulseAtmosphere"
     local cl  = Instance.new("Clouds");     cl.Name ="PulseClouds"
     local sky = Instance.new("Sky");        sky.Name="PulseSky"
+
     if mode == "Fog" then
         atm.Density=0.65; atm.Color=Color3.fromRGB(180,180,200)
         atm.Decay=Color3.fromRGB(120,120,150); atm.Haze=3
         cl.Cover=0.9; cl.Density=0.7
         L.FogEnd=250; L.FogStart=0; L.FogColor=Color3.fromRGB(180,180,200)
         L.Brightness=1.2; L.ClockTime=15
+        destroyWeatherFX()
     elseif mode == "Rain" then
         atm.Density=0.5; atm.Color=Color3.fromRGB(90,95,110)
         atm.Decay=Color3.fromRGB(50,50,70)
         cl.Cover=1; cl.Density=1; cl.Color=Color3.fromRGB(80,80,90)
         L.FogEnd=120; L.FogStart=0; L.FogColor=Color3.fromRGB(90,90,110)
         L.Brightness=0.7; L.ClockTime=14; L.Ambient=Color3.fromRGB(60,60,80)
+        makeWeatherFX("Rain")
     elseif mode == "Snow" then
         atm.Density=0.3; atm.Color=Color3.fromRGB(230,235,245)
         atm.Decay=Color3.fromRGB(200,210,230)
         cl.Cover=0.8; cl.Density=0.4; cl.Color=Color3.fromRGB(240,240,255)
         L.FogEnd=400; L.FogColor=Color3.fromRGB(230,235,245)
         L.Brightness=2; L.ClockTime=12; L.Ambient=Color3.fromRGB(180,190,210)
+        makeWeatherFX("Snow")
     elseif mode == "Blood" then
         atm.Density=0.8; atm.Color=Color3.fromRGB(120,20,20)
         atm.Decay=Color3.fromRGB(60,0,0)
         cl.Cover=1; cl.Density=1; cl.Color=Color3.fromRGB(80,10,10)
         L.FogEnd=100; L.FogColor=Color3.fromRGB(80,10,10)
         L.Brightness=0.5; L.ClockTime=17; L.Ambient=Color3.fromRGB(60,10,10)
+        destroyWeatherFX()
     elseif mode == "Night" then
         atm.Density=0.3; atm.Color=Color3.fromRGB(30,30,60)
         atm.Decay=Color3.fromRGB(10,10,30)
         cl.Cover=0.2; cl.Density=0.2
         L.FogEnd=500; L.Brightness=0.6
         L.ClockTime=0; L.Ambient=Color3.fromRGB(40,40,60)
+        destroyWeatherFX()
     else
         atm.Density=0.2; atm.Color=Color3.fromRGB(199,199,199)
         cl.Cover=0.1; cl.Density=0.2
         L.FogEnd=100000; L.Brightness=2
+        destroyWeatherFX()
     end
     atm.Parent=L; cl.Parent=L; sky.Parent=L
     V.Weather.on=true; V.Weather.mode=mode
@@ -143,6 +235,7 @@ function V.Weather.off()
     for _, n in ipairs({"PulseAtmosphere","PulseClouds","PulseSky"}) do
         local o=L:FindFirstChild(n); if o then o:Destroy() end
     end
+    destroyWeatherFX()
     restoreForeign()
     L.FogEnd=100000; L.Brightness=2
     V.Weather.on=false
@@ -475,14 +568,13 @@ function V.XRay.set(v, strength)
     if not v then for p, tr in pairs(V.XRay._orig) do if p.Parent then pcall(function() p.Transparency=tr end) end end; V.XRay._orig={} end
 end
 
--- 10. ROLE ESP
+-- 10. ROLE ESP (СКВОЗЬ СТЕНЫ)
 V.RoleESP = { on=false,
     murderer=Color3.fromRGB(255,60,60), sheriff=Color3.fromRGB(60,140,255),
     innocent=Color3.fromRGB(60,255,90), hero=Color3.fromRGB(255,200,60),
     box=true, tracer=false, skeleton=false,
     showName=true, showRole=true, showDist=true, maxDist=0, _guis={} }
 
-local pulseRoster = getgenv().__pulseRoster or {}
 local function pulseGetRole(plr)
     local d = getgenv().__pulseRoster or getgenv().__pulseRoles
     if type(d)=="table" and d[plr.Name] then
@@ -534,6 +626,7 @@ local function newLine()
     local f = Instance.new("Frame")
     f.BorderSizePixel=0; f.AnchorPoint=Vector2.new(0.5,0.5)
     f.BackgroundColor3=Color3.new(1,1,1); f.Visible=false
+    f.ZIndex = 5
     f.Parent = V.RoleESP._rootGui
     return f
 end
@@ -543,7 +636,9 @@ local function makeRoleGui(plr)
     local gui = Instance.new("BillboardGui")
     gui.Name="PulseRole_"..plr.Name
     gui.Size=UDim2.fromOffset(200,90); gui.StudsOffsetWorldSpace=Vector3.new(0,3,0)
-    gui.AlwaysOnTop=true; gui.Parent=pg
+    gui.AlwaysOnTop=true; gui.MaxDistance = math.huge
+    gui.LightInfluence = 0
+    gui.Parent=pg
     local root = Instance.new("Frame"); root.BackgroundTransparency=1; root.Size=UDim2.fromScale(1,1); root.Parent=gui
     local role = Instance.new("TextLabel")
     role.BackgroundTransparency=1; role.Size=UDim2.new(1,0,0,18)
@@ -565,7 +660,6 @@ local function destroyRoleGui(plr)
     V.RoleESP._guis[plr]=nil
 end
 local function updateBoxLines(g, x1, y1, x2, y2, color)
-    local w, h = x2-x1, y2-y1
     local pts = {
         {x1,y1,x2,y1},{x1,y2,x2,y2},{x1,y1,x1,y2},{x2,y1,x2,y2},
     }
@@ -638,8 +732,11 @@ local function roleEspTick()
                 if not g then g = makeRoleGui(plr); V.RoleESP._guis[plr]=g end
                 if not g.hl then
                     g.hl = Instance.new("Highlight")
-                    g.hl.Name="PulseRoleHL"; g.hl.DepthMode=Enum.HighlightDepthMode.Occluded
-                    g.hl.FillTransparency=0.6; g.hl.OutlineTransparency=0; g.hl.Parent=Cam
+                    g.hl.Name="PulseRoleHL"
+                    -- СКВОЗЬ СТЕНЫ
+                    g.hl.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop
+                    g.hl.FillTransparency=0.55; g.hl.OutlineTransparency=0
+                    g.hl.Parent=Cam
                 end
                 if g.hl.Adornee ~= char then g.hl.Adornee = char end
                 g.hl.FillColor = col; g.hl.OutlineColor = col
@@ -921,7 +1018,7 @@ function V.AnimPack.restore(char)
 end
 
 -- ============================================================
--- roles (для аим-таргета)
+-- roles
 -- ============================================================
 local roleCacheMod, roleCache, roleCacheStamp = nil, {}, 0
 local function refreshRoleCache()
@@ -1474,7 +1571,7 @@ local function bt_build()
         elseif o:IsA("BasePart") then
             o.Anchored=true; o.CanCollide=false; o.CanQuery=false; o.CanTouch=false; o.Massless=true; o.CastShadow=false
             if o.Name=="HumanoidRootPart" then o.Transparency=1
-            else o.Material=Enum.Material.ForceField; o.Color=Color3.fromRGB(170,100,255); o.Transparency=0.3 end
+            else o.Material=Enum.Material.ForceField; o.Color=BT.color; o.Transparency=0.3 end
             ci=ci+1
             if rparts[ci] then BT.cache[#BT.cache+1]={o,rparts[ci]} end
         end
@@ -1511,7 +1608,7 @@ end
 local bt_conn = RS.Heartbeat:Connect(function() if BT.on then pcall(bt_update) end end)
 
 -- ============================================================
--- MOVE (fly — функционал, не визуал)
+-- MOVE
 -- ============================================================
 local function applySpeed() local h=hum(); if h then h.WalkSpeed=MOVE.speedOn and MOVE.speed or 16 end end
 local function applyJump() local h=hum(); if h then h.JumpPower=MOVE.jumpOn and MOVE.jump or 50 end end
@@ -1730,7 +1827,7 @@ end
 local function stopTroll() TROLL.flinging=false end
 
 -- ============================================================
--- KILL LIGHTNING (functional visual on kills)
+-- KILL LIGHTNING
 -- ============================================================
 local killOn = true
 local killHooked = {}
@@ -1772,13 +1869,18 @@ local function hookKills()
 end
 
 -- ============================================================
--- MAIN LOOP (визуал тики)
+-- MAIN LOOP
 -- ============================================================
 local chamsAcc, roleAcc, xrayAcc, gunAcc, mapAcc = 0,0,0,0,0
 local pulseHb = RS.Heartbeat:Connect(function(dt)
     if not ADDON.loaded then return end
     pcall(function()
         updateWings(); V.Sakura.tick(dt); crosshairTick(); wobbleTick(); vfxTick(dt)
+        -- погода: следить за камерой
+        if V.Weather.on and V.Weather._fxPart and V.Weather._fxPart.Parent then
+            local cf = workspace.CurrentCamera.CFrame
+            V.Weather._fxPart.CFrame = CFrame.new(cf.Position + Vector3.new(0, 25, 0))
+        end
         chamsAcc = chamsAcc + dt
         if chamsAcc >= 0.06 then
             chamsAcc = 0
@@ -1873,7 +1975,6 @@ local Window = OrionLib:MakeWindow({
     Icon = "rbxassetid://4483345998",
 })
 
--- COMBAT
 local TabCombat = Window:MakeTab({ Name = "Combat", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 TabCombat:AddSection({ Name = "Silent Aim" })
 TabCombat:AddToggle({ Name = "Silent Aim", Default = true, Callback = function(v)
@@ -1924,7 +2025,6 @@ TabCombat:AddToggle({ Name = "Auto Gun", Default = false, Callback = function(v)
     MakeNotif("Auto Gun", v and "on" or "off", 2)
 end })
 
--- MOVE (fly — функционал)
 local TabMove = Window:MakeTab({ Name = "Move", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 TabMove:AddSection({ Name = "Walk" })
 TabMove:AddToggle({ Name = "Walkspeed", Default = false, Callback = function(v) MOVE.speedOn=v; applySpeed() end })
@@ -1978,7 +2078,6 @@ end })
 TabMove:AddToggle({ Name = "Anti Fall", Default = false, Callback = function(v) MOVE.antiFall=v end })
 TabMove:AddToggle({ Name = "Anti Fling", Default = false, Callback = function(v) fl.antifling=v end })
 
--- TROLL
 local TabTroll = Window:MakeTab({ Name = "Troll", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 TabTroll:AddSection({ Name = "Fling" })
 TabTroll:AddButton({ Name = "Fling Nearest", Callback = function() flingNearest() end })
@@ -2022,20 +2121,24 @@ TabTroll:AddButton({ Name = "TP to Random", Callback = function()
     if hrp and th then hrp.CFrame=th.CFrame+Vector3.new(0,0,3) end
 end })
 
--- VISUALS (PULSE)
+-- VISUALS
 local TabV = Window:MakeTab({ Name = "Visuals", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 TabV:AddSection({ Name = "World" })
-local weatherModes = { "Fog", "Rain", "Snow", "Blood", "Night", "Clear" }
 local weatherIdx = 1
+local function applyWeather(mode)
+    weatherIdx = ({Fog=1,Rain=2,Snow=3,Blood=4,Night=5,Clear=6})[mode] or 1
+    if V.Weather.on then V.Weather.set(mode) end
+end
 TabV:AddToggle({ Name = "Weather", Default = false, Callback = function(v)
-    if v then V.Weather.set(weatherModes[weatherIdx]) else V.Weather.off() end
+    if v then V.Weather.set(({ "Fog","Rain","Snow","Blood","Night","Clear" })[weatherIdx])
+    else V.Weather.off() end
 end })
-TabV:AddButton({ Name = "Weather: Fog", Callback = function() weatherIdx=1; if V.Weather.on then V.Weather.set("Fog") end MakeNotif("Weather", "Fog", 2) end })
-TabV:AddButton({ Name = "Weather: Rain", Callback = function() weatherIdx=2; if V.Weather.on then V.Weather.set("Rain") end MakeNotif("Weather", "Rain", 2) end })
-TabV:AddButton({ Name = "Weather: Snow", Callback = function() weatherIdx=3; if V.Weather.on then V.Weather.set("Snow") end MakeNotif("Weather", "Snow", 2) end })
-TabV:AddButton({ Name = "Weather: Blood", Callback = function() weatherIdx=4; if V.Weather.on then V.Weather.set("Blood") end MakeNotif("Weather", "Blood", 2) end })
-TabV:AddButton({ Name = "Weather: Night", Callback = function() weatherIdx=5; if V.Weather.on then V.Weather.set("Night") end MakeNotif("Weather", "Night", 2) end })
-TabV:AddButton({ Name = "Weather: Clear", Callback = function() weatherIdx=6; if V.Weather.on then V.Weather.set("Clear") end MakeNotif("Weather", "Clear", 2) end })
+TabV:AddButton({ Name = "Weather: Fog", Callback = function() applyWeather("Fog") end })
+TabV:AddButton({ Name = "Weather: Rain", Callback = function() applyWeather("Rain") end })
+TabV:AddButton({ Name = "Weather: Snow", Callback = function() applyWeather("Snow") end })
+TabV:AddButton({ Name = "Weather: Blood", Callback = function() applyWeather("Blood") end })
+TabV:AddButton({ Name = "Weather: Night", Callback = function() applyWeather("Night") end })
+TabV:AddButton({ Name = "Weather: Clear", Callback = function() applyWeather("Clear") end })
 TabV:AddToggle({ Name = "Fullbright", Default = false, Callback = function(v) V.Fullbright.set(v) end })
 TabV:AddToggle({ Name = "Map Forcefield", Default = false, Callback = function(v) V.MapFF.set(v) end })
 TabV:AddSection({ Name = "Character" })
@@ -2055,7 +2158,6 @@ TabV:AddToggle({ Name = "VFX Aura", Default = false, Callback = function(v) V.VF
 TabV:AddSection({ Name = "UI" })
 TabV:AddToggle({ Name = "Crosshair", Default = false, Callback = function(v) V.Crosshair.set(v) end })
 
--- CHAMS
 local TabChams = Window:MakeTab({ Name = "Chams", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 TabChams:AddSection({ Name = "Chams" })
 TabChams:AddToggle({ Name = "Self Chams", Default = false, Callback = function(v)
@@ -2082,7 +2184,6 @@ TabChams:AddToggle({ Name = "X-Ray", Default = false, Callback = function(v) V.X
 TabChams:AddSlider({ Name = "X-Ray Strength", Min=0.1, Max=1, Default=0.75, Increment=0.05, ValueName="a",
     Color=Color3.fromRGB(86,76,251), Callback=function(v) V.XRay.strength=v end })
 
--- ESP (Role)
 local TabEsp = Window:MakeTab({ Name = "ESP", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 TabEsp:AddToggle({ Name = "Role ESP", Default = false, Callback = function(v) V.RoleESP.set(v) end })
 TabEsp:AddToggle({ Name = "Box", Default = true, Callback = function(v) V.RoleESP.box = v end })
@@ -2094,17 +2195,14 @@ TabEsp:AddToggle({ Name = "Show Distance", Default = true, Callback = function(v
 TabEsp:AddSlider({ Name = "Max Distance", Min=0, Max=2000, Default=0, Increment=50, ValueName="studs",
     Color=Color3.fromRGB(86,76,251), Callback=function(v) V.RoleESP.maxDist=v end })
 
--- MODEL
 local TabModel = Window:MakeTab({ Name = "Model", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 TabModel:AddToggle({ Name = "Headless", Default = false, Callback = function(v) V.Headless.set(LP.Character, v) end })
 TabModel:AddToggle({ Name = "Korblox", Default = false, Callback = function(v) V.Korblox.set(LP.Character, v) end })
 
--- SKIN
 local TabSkin = Window:MakeTab({ Name = "Skin", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 TabSkin:AddButton({ Name = "Open Skin Browser", Callback = function() V.SkinGUI.open() end })
 TabSkin:AddButton({ Name = "Restore Animate Pack", Callback = function() V.AnimPack.restore(LP.Character) end })
 
--- THEME
 local TabTheme = Window:MakeTab({ Name = "Theme", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 TabTheme:AddColorpicker({ Name = "Accent", Default = Color3.fromRGB(86,76,251),
     Callback = function(c) pcall(function() OrionLib:ChangeColor("Accent", c) end) end })
@@ -2113,11 +2211,14 @@ TabTheme:AddColorpicker({ Name = "Background", Default = Color3.fromRGB(26,32,58
 TabTheme:AddColorpicker({ Name = "Element", Default = Color3.fromRGB(38,45,71),
     Callback = function(c) pcall(function() OrionLib:ChangeColor("Element", c) end) end })
 
--- EXTRA
 local TabExtra = Window:MakeTab({ Name = "Extra", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 TabExtra:AddToggle({ Name = "Kill Lightning", Default = true, Callback = function(v) killOn=v end })
 TabExtra:AddToggle({ Name = "Backtrack", Default = false, Callback = function(v)
     BT.on=v; if v then task.spawn(bt_build) end
+end })
+TabExtra:AddColorpicker({ Name = "Backtrack Color", Default = BT.color, Callback = function(c)
+    BT.color = c
+    if BT.on then task.spawn(bt_build) end
 end })
 TabExtra:AddToggle({ Name = "Anti AFK", Default = false, Callback = function(v) fl.noafk=v end })
 TabExtra:AddButton({ Name = "Clear Particles", Callback = function()
@@ -2136,7 +2237,6 @@ ADDON.unload = function()
     pcall(restore_wb)
     workspace.Gravity = 196.2
 
-    -- pulse cleanup
     pcall(function() V.Weather.off() end)
     pcall(function() V.Fullbright.set(false) end)
     pcall(function() V.Sakura.set(false) end)
