@@ -17,6 +17,7 @@ local Stats      = game:GetService("Stats")
 local UIS        = game:GetService("UserInputService")
 local L          = game:GetService("Lighting")
 local PPS        = game:GetService("ProximityPromptService")
+local CG         = game:GetService("CoreGui")
 local LP         = Players.LocalPlayer
 if not LP then
     Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
@@ -30,7 +31,6 @@ local function MakeNotif(name, content, dur)
         OrionLib:MakeNotification({ Name=name or "StarWare", Content=content or "", Time=dur or 3 })
     end)
 end
-
 local function safe_destroy(i) if i and typeof(i)=="Instance" and i.Parent then pcall(function() i:Destroy() end) end end
 local function safe_disconnect(c) if c then pcall(function() c:Disconnect() end) end end
 
@@ -66,34 +66,26 @@ local fl = { antifling=false, noafk=false }
 local V = {}
 _G.PulseV = V
 
--- 1. WEATHER (с реальным дождём и снегом)
+-- 1. WEATHER
 V.Weather = {on=false, mode="Fog", _conn=nil, _fxPart=nil, _emitters={}}
-
 local function clearForeign()
     for _, o in ipairs(L:GetChildren()) do
         if (o:IsA("Atmosphere") or o:IsA("Clouds") or o:IsA("Sky"))
             and tostring(o.Name):sub(1,5) ~= "Pulse" then
-            o:SetAttribute("_pHid", o.Parent)
-            o.Parent = nil
+            o:SetAttribute("_pHid", o.Parent); o.Parent = nil
         end
     end
 end
 local function restoreForeign()
     for _, o in ipairs(L:GetChildren()) do
-        if o:GetAttribute("_pHid") ~= nil then
-            o.Parent = o:GetAttribute("_pHid")
-            o:SetAttribute("_pHid", nil)
-        end
+        if o:GetAttribute("_pHid") ~= nil then o.Parent = o:GetAttribute("_pHid"); o:SetAttribute("_pHid", nil) end
     end
 end
-
 local function destroyWeatherFX()
     for _, e in ipairs(V.Weather._emitters) do pcall(function() e:Destroy() end) end
     V.Weather._emitters = {}
-    safe_destroy(V.Weather._fxPart)
-    V.Weather._fxPart = nil
+    safe_destroy(V.Weather._fxPart); V.Weather._fxPart = nil
 end
-
 local function makeWeatherFX(kind)
     destroyWeatherFX()
     local part = Instance.new("Part")
@@ -103,81 +95,39 @@ local function makeWeatherFX(kind)
     part.CastShadow = false; part.Transparency = 1
     part.Parent = workspace
     V.Weather._fxPart = part
-
     local function emit(cfg)
         local pe = Instance.new("ParticleEmitter")
         pe.Texture = cfg.tex or "rbxasset://textures/particles/sparkles_main.dds"
         pe.Rate = cfg.rate or 200
-        pe.Lifetime = cfg.life
-        pe.Speed = cfg.speed
+        pe.Lifetime = cfg.life; pe.Speed = cfg.speed
         pe.SpreadAngle = cfg.spread or Vector2.new(20,20)
         pe.Rotation = cfg.rot or NumberRange.new(0,360)
         pe.RotSpeed = cfg.rotspd or NumberRange.new(-30,30)
-        pe.Size = cfg.size
-        pe.Transparency = cfg.trans
-        pe.Color = cfg.color
-        pe.LightEmission = cfg.le or 0.8
-        pe.LightInfluence = 0
+        pe.Size = cfg.size; pe.Transparency = cfg.trans; pe.Color = cfg.color
+        pe.LightEmission = cfg.le or 0.8; pe.LightInfluence = 0
         pe.Acceleration = cfg.acc or Vector3.new(0,-10,0)
         pe.EmissionDirection = Enum.NormalId.Bottom
-        pe.VelocityInheritance = 0
-        pe.Drag = cfg.drag or 0
-        pe.ZOffset = cfg.zoff or 2
+        pe.VelocityInheritance = 0; pe.Drag = cfg.drag or 0; pe.ZOffset = cfg.zoff or 2
         pe.Parent = part
         table.insert(V.Weather._emitters, pe)
         return pe
     end
-
     if kind == "Rain" then
-        emit({
-            tex = "rbxasset://textures/particles/sparkles_main.dds",
-            rate = 500,
-            life = NumberRange.new(0.35, 0.55),
-            speed = NumberRange.new(120, 180),
-            spread = Vector2.new(0, 0),
-            rot = NumberRange.new(90, 90),
-            rotspd = NumberRange.new(0, 0),
-            size = NumberSequence.new({
-                NumberSequenceKeypoint.new(0, 0.18),
-                NumberSequenceKeypoint.new(1, 0.05),
-            }),
-            trans = NumberSequence.new({
-                NumberSequenceKeypoint.new(0, 0.35),
-                NumberSequenceKeypoint.new(1, 0.7),
-            }),
-            color = ColorSequence.new(Color3.fromRGB(180, 210, 255)),
-            le = 0.2,
-            acc = Vector3.new(0, -200, 0),
-            drag = 0,
-            zoff = 4,
-        })
+        emit({ rate=500, life=NumberRange.new(0.35,0.55), speed=NumberRange.new(120,180),
+            spread=Vector2.new(0,0), rot=NumberRange.new(90,90), rotspd=NumberRange.new(0,0),
+            size=NumberSequence.new({NumberSequenceKeypoint.new(0,0.18),NumberSequenceKeypoint.new(1,0.05)}),
+            trans=NumberSequence.new({NumberSequenceKeypoint.new(0,0.35),NumberSequenceKeypoint.new(1,0.7)}),
+            color=ColorSequence.new(Color3.fromRGB(180,210,255)), le=0.2,
+            acc=Vector3.new(0,-200,0), drag=0, zoff=4 })
     elseif kind == "Snow" then
-        emit({
-            tex = "rbxasset://textures/particles/sparkles_main.dds",
-            rate = 220,
-            life = NumberRange.new(3, 5),
-            speed = NumberRange.new(4, 8),
-            spread = Vector2.new(35, 35),
-            rot = NumberRange.new(0, 360),
-            rotspd = NumberRange.new(-30, 30),
-            size = NumberSequence.new({
-                NumberSequenceKeypoint.new(0, 0.3),
-                NumberSequenceKeypoint.new(0.5, 0.55),
-                NumberSequenceKeypoint.new(1, 0.1),
-            }),
-            trans = NumberSequence.new({
-                NumberSequenceKeypoint.new(0, 0.05),
-                NumberSequenceKeypoint.new(1, 0.55),
-            }),
-            color = ColorSequence.new(Color3.fromRGB(255, 255, 255)),
-            le = 0.8,
-            acc = Vector3.new(0, -3, 0),
-            drag = 0.5,
-            zoff = 4,
-        })
+        emit({ rate=220, life=NumberRange.new(3,5), speed=NumberRange.new(4,8),
+            spread=Vector2.new(35,35), rot=NumberRange.new(0,360), rotspd=NumberRange.new(-30,30),
+            size=NumberSequence.new({NumberSequenceKeypoint.new(0,0.3),NumberSequenceKeypoint.new(0.5,0.55),NumberSequenceKeypoint.new(1,0.1)}),
+            trans=NumberSequence.new({NumberSequenceKeypoint.new(0,0.05),NumberSequenceKeypoint.new(1,0.55)}),
+            color=ColorSequence.new(Color3.fromRGB(255,255,255)), le=0.8,
+            acc=Vector3.new(0,-3,0), drag=0.5, zoff=4 })
     end
 end
-
 function V.Weather.set(mode)
     clearForeign()
     for _, n in ipairs({"PulseAtmosphere","PulseClouds","PulseSky"}) do
@@ -186,7 +136,6 @@ function V.Weather.set(mode)
     local atm = Instance.new("Atmosphere"); atm.Name="PulseAtmosphere"
     local cl  = Instance.new("Clouds");     cl.Name ="PulseClouds"
     local sky = Instance.new("Sky");        sky.Name="PulseSky"
-
     if mode == "Fog" then
         atm.Density=0.65; atm.Color=Color3.fromRGB(180,180,200)
         atm.Decay=Color3.fromRGB(120,120,150); atm.Haze=3
@@ -195,32 +144,27 @@ function V.Weather.set(mode)
         L.Brightness=1.2; L.ClockTime=15
         destroyWeatherFX()
     elseif mode == "Rain" then
-        atm.Density=0.5; atm.Color=Color3.fromRGB(90,95,110)
-        atm.Decay=Color3.fromRGB(50,50,70)
+        atm.Density=0.5; atm.Color=Color3.fromRGB(90,95,110); atm.Decay=Color3.fromRGB(50,50,70)
         cl.Cover=1; cl.Density=1; cl.Color=Color3.fromRGB(80,80,90)
         L.FogEnd=120; L.FogStart=0; L.FogColor=Color3.fromRGB(90,90,110)
         L.Brightness=0.7; L.ClockTime=14; L.Ambient=Color3.fromRGB(60,60,80)
         makeWeatherFX("Rain")
     elseif mode == "Snow" then
-        atm.Density=0.3; atm.Color=Color3.fromRGB(230,235,245)
-        atm.Decay=Color3.fromRGB(200,210,230)
+        atm.Density=0.3; atm.Color=Color3.fromRGB(230,235,245); atm.Decay=Color3.fromRGB(200,210,230)
         cl.Cover=0.8; cl.Density=0.4; cl.Color=Color3.fromRGB(240,240,255)
         L.FogEnd=400; L.FogColor=Color3.fromRGB(230,235,245)
         L.Brightness=2; L.ClockTime=12; L.Ambient=Color3.fromRGB(180,190,210)
         makeWeatherFX("Snow")
     elseif mode == "Blood" then
-        atm.Density=0.8; atm.Color=Color3.fromRGB(120,20,20)
-        atm.Decay=Color3.fromRGB(60,0,0)
+        atm.Density=0.8; atm.Color=Color3.fromRGB(120,20,20); atm.Decay=Color3.fromRGB(60,0,0)
         cl.Cover=1; cl.Density=1; cl.Color=Color3.fromRGB(80,10,10)
         L.FogEnd=100; L.FogColor=Color3.fromRGB(80,10,10)
         L.Brightness=0.5; L.ClockTime=17; L.Ambient=Color3.fromRGB(60,10,10)
         destroyWeatherFX()
     elseif mode == "Night" then
-        atm.Density=0.3; atm.Color=Color3.fromRGB(30,30,60)
-        atm.Decay=Color3.fromRGB(10,10,30)
+        atm.Density=0.3; atm.Color=Color3.fromRGB(30,30,60); atm.Decay=Color3.fromRGB(10,10,30)
         cl.Cover=0.2; cl.Density=0.2
-        L.FogEnd=500; L.Brightness=0.6
-        L.ClockTime=0; L.Ambient=Color3.fromRGB(40,40,60)
+        L.FogEnd=500; L.Brightness=0.6; L.ClockTime=0; L.Ambient=Color3.fromRGB(40,40,60)
         destroyWeatherFX()
     else
         atm.Density=0.2; atm.Color=Color3.fromRGB(199,199,199)
@@ -235,8 +179,7 @@ function V.Weather.off()
     for _, n in ipairs({"PulseAtmosphere","PulseClouds","PulseSky"}) do
         local o=L:FindFirstChild(n); if o then o:Destroy() end
     end
-    destroyWeatherFX()
-    restoreForeign()
+    destroyWeatherFX(); restoreForeign()
     L.FogEnd=100000; L.Brightness=2
     V.Weather.on=false
 end
@@ -341,14 +284,10 @@ local function buildWings(char, scale)
             f.Massless=true; f.CastShadow=false
             f.TopSurface=Enum.SurfaceType.Smooth; f.BottomSurface=Enum.SurfaceType.Smooth
             local m = Instance.new("SpecialMesh"); m.MeshType=Enum.MeshType.Wedge; m.Parent=f
-            local pl = Instance.new("PointLight")
-            pl.Color=f.Color; pl.Brightness=1.2; pl.Range=6; pl.Parent=f
+            local pl = Instance.new("PointLight"); pl.Color=f.Color; pl.Brightness=1.2; pl.Range=6; pl.Parent=f
             f.Parent=model
-            local angY = math.rad(side*(10+t*65))
-            local angX = math.rad(-25+t*70)
-            local angZ = math.rad(side*(-5-t*25))
-            local w = Instance.new("Weld")
-            w.Part0=root; w.Part1=f
+            local angY = math.rad(side*(10+t*65)); local angX = math.rad(-25+t*70); local angZ = math.rad(side*(-5-t*25))
+            local w = Instance.new("Weld"); w.Part0=root; w.Part1=f
             w.C0 = CFrame.new(0,0,0)*CFrame.Angles(angX,angY,angZ)*CFrame.new(0,0,-len*0.5)
             w.Parent=f
             f:SetAttribute("Phase", t); f:SetAttribute("Side", side)
@@ -456,7 +395,7 @@ local function gunEspTick()
                 hl.Name="PulseGunHL"; hl.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop
                 hl.FillColor=V.Chams.gunColor; hl.OutlineColor=V.Chams.gunColor
                 hl.FillTransparency=0.4; hl.OutlineTransparency=0
-                hl.Adornee=p; hl.Parent=Cam
+                hl.Adornee=p; hl.Parent=CG
                 table.insert(V.GunESP.items, hl)
             end
         end
@@ -568,23 +507,31 @@ function V.XRay.set(v, strength)
     if not v then for p, tr in pairs(V.XRay._orig) do if p.Parent then pcall(function() p.Transparency=tr end) end end; V.XRay._orig={} end
 end
 
--- 10. ROLE ESP (СКВОЗЬ СТЕНЫ)
+-- 10. ROLE ESP (все игроки, сквозь стены)
 V.RoleESP = { on=false,
     murderer=Color3.fromRGB(255,60,60), sheriff=Color3.fromRGB(60,140,255),
     innocent=Color3.fromRGB(60,255,90), hero=Color3.fromRGB(255,200,60),
-    box=true, tracer=false, skeleton=false,
+    box=true, tracer=false, skeleton=false, boxStyle="Full",
     showName=true, showRole=true, showDist=true, maxDist=0, _guis={} }
 
 local function pulseGetRole(plr)
+    -- 1. хук на реальный role cache из main кода
+    local getter = getgenv().__pulseRoleGetter
+    if type(getter) == "function" then
+        local r = getter(plr)
+        if r then return r end
+    end
+    -- 2. roster global
     local d = getgenv().__pulseRoster or getgenv().__pulseRoles
     if type(d)=="table" and d[plr.Name] then
         local e = d[plr.Name]
         if type(e)=="table" then return e.Role end
         return e
     end
-    local ch = plr.Character
-    if ch then
-        for _, t in ipairs(ch:GetChildren()) do
+    -- 3. сканирование тулов в character/backpack
+    local function scan(container)
+        if not container then return nil end
+        for _, t in ipairs(container:GetChildren()) do
             if t:IsA("Tool") then
                 local n = tostring(t.Name):lower()
                 if n:find("knife") then return "Murderer" end
@@ -592,17 +539,10 @@ local function pulseGetRole(plr)
             end
         end
     end
-    local bp = plr:FindFirstChildOfClass("Backpack")
-    if bp then
-        for _, t in ipairs(bp:GetChildren()) do
-            if t:IsA("Tool") then
-                local n = tostring(t.Name):lower()
-                if n:find("knife") then return "Murderer" end
-                if n:find("gun") then return "Sheriff" end
-            end
-        end
-    end
-    return nil
+    local r = scan(plr.Character) or scan(plr:FindFirstChildOfClass("Backpack"))
+    if r then return r end
+    -- 4. fallback — Innocent (для всех живых)
+    return "Innocent"
 end
 local function roleColor(role)
     if role=="Murderer" then return V.RoleESP.murderer end
@@ -618,7 +558,8 @@ do
     if not sg then
         sg = Instance.new("ScreenGui")
         sg.Name="PulseEspOverlay"; sg.IgnoreGuiInset=true
-        sg.ResetOnSpawn=false; sg.DisplayOrder=9999; sg.Parent=pg
+        sg.ResetOnSpawn=false; sg.DisplayOrder=9999; sg.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
+        sg.Parent=pg
     end
     V.RoleESP._rootGui = sg
 end
@@ -636,17 +577,21 @@ local function makeRoleGui(plr)
     local gui = Instance.new("BillboardGui")
     gui.Name="PulseRole_"..plr.Name
     gui.Size=UDim2.fromOffset(200,90); gui.StudsOffsetWorldSpace=Vector3.new(0,3,0)
-    gui.AlwaysOnTop=true; gui.MaxDistance = math.huge
-    gui.LightInfluence = 0
+    gui.AlwaysOnTop=true; gui.MaxDistance = math.huge; gui.LightInfluence = 0
     gui.Parent=pg
     local root = Instance.new("Frame"); root.BackgroundTransparency=1; root.Size=UDim2.fromScale(1,1); root.Parent=gui
     local role = Instance.new("TextLabel")
     role.BackgroundTransparency=1; role.Size=UDim2.new(1,0,0,18)
-    role.Font=Enum.Font.GothamBold; role.TextSize=14; role.Text=""; role.TextStrokeTransparency=0.4
+    role.Font=Enum.Font.GothamBold; role.TextSize=14; role.Text=""
+    role.TextStrokeTransparency=0.3; role.TextStrokeColor3=Color3.new(0,0,0)
     role.Parent=root
-    local name = role:Clone(); name.Position=UDim2.new(0,0,0,18); name.TextSize=12; name.Parent=root
-    local dist = role:Clone(); dist.Position=UDim2.new(0,0,0,33); dist.TextSize=11
-    dist.TextColor3=Color3.fromRGB(220,220,220); dist.Parent=root
+    local name = role:Clone()
+    name.Position=UDim2.new(0,0,0,18); name.TextSize=12; name.Font=Enum.Font.GothamMedium
+    name.TextStrokeTransparency=0.5; name.Parent=root
+    local dist = role:Clone()
+    dist.Position=UDim2.new(0,0,0,33); dist.TextSize=11; dist.Font=Enum.Font.Gotham
+    dist.TextColor3=Color3.fromRGB(200,200,200); dist.TextStrokeTransparency=0.6
+    dist.Parent=root
     return { gui=gui, root=root, roleLbl=role, nameLbl=name, distLbl=dist,
         hl=nil, box=makeBones(), tracer=newLine(), bones=makeBones() }
 end
@@ -659,25 +604,49 @@ local function destroyRoleGui(plr)
     pcall(function() g.tracer:Destroy() end)
     V.RoleESP._guis[plr]=nil
 end
-local function updateBoxLines(g, x1, y1, x2, y2, color)
-    local pts = {
-        {x1,y1,x2,y1},{x1,y2,x2,y2},{x1,y1,x1,y2},{x2,y1,x2,y2},
-    }
-    for i=1,4 do
-        local l = g.box[i]
-        if pts[i] then
-            local a,b,c,d = pts[i][1],pts[i][2],pts[i][3],pts[i][4]
-            local dx,dy = c-a, d-b
-            local len = math.sqrt(dx*dx+dy*dy)
-            l.Size=UDim2.fromOffset(len,1)
-            l.Position=UDim2.fromOffset((a+c)/2,(b+d)/2)
-            l.Rotation=math.deg(math.atan2(dy,dx))
-            l.BackgroundColor3=color; l.BackgroundTransparency=0; l.Visible=true
-        else
-            l.Visible=false
+local function drawLine(l, ax, ay, bx, by, color)
+    local dx, dy = bx-ax, by-ay
+    local len = math.sqrt(dx*dx+dy*dy)
+    l.Size=UDim2.fromOffset(len, 1)
+    l.Position=UDim2.fromOffset((ax+bx)/2, (ay+by)/2)
+    l.Rotation=math.deg(math.atan2(dy, dx))
+    l.BackgroundColor3=color
+    l.BackgroundTransparency=0
+    l.Visible=true
+end
+local function updateBoxLines(g, x1, y1, x2, y2, color, style)
+    if style == "Corners" then
+        local w = x2 - x1
+        local h = y2 - y1
+        local cw = math.clamp(w*0.22, 5, 22)
+        local ch = math.clamp(h*0.22, 5, 22)
+        local lines = {
+            {x1,y1,x1+cw,y1}, {x1,y1,x1,y1+ch},
+            {x2-cw,y1,x2,y1}, {x2,y1,x2,y1+ch},
+            {x1,y2,x1+cw,y2}, {x1,y2-ch,x1,y2},
+            {x2-cw,y2,x2,y2}, {x2,y2-ch,x2,y2},
+        }
+        for i = 1, 8 do
+            local l = g.box[i]
+            if lines[i] then
+                drawLine(l, lines[i][1], lines[i][2], lines[i][3], lines[i][4], color)
+            else
+                l.Visible = false
+            end
+        end
+    else
+        local lines = {
+            {x1,y1,x2,y1}, {x1,y2,x2,y2}, {x1,y1,x1,y2}, {x2,y1,x2,y2},
+        }
+        for i = 1, 8 do
+            local l = g.box[i]
+            if lines[i] then
+                drawLine(l, lines[i][1], lines[i][2], lines[i][3], lines[i][4], color)
+            else
+                l.Visible = false
+            end
         end
     end
-    for i=5,8 do g.box[i].Visible=false end
 end
 local function updateSkeleton(g, char, cam, color)
     local bones = getgenv().__pulseSkelBones
@@ -696,12 +665,7 @@ local function updateSkeleton(g, char, cam, color)
                 idx = idx + 1
                 local l = g.bones[idx]
                 if l then
-                    local dx,dy = sb.X-sa.X, sb.Y-sa.Y
-                    local len = math.sqrt(dx*dx+dy*dy)
-                    l.Size=UDim2.fromOffset(len,2)
-                    l.Position=UDim2.fromOffset((sa.X+sb.X)/2,(sa.Y+sb.Y)/2)
-                    l.Rotation=math.deg(math.atan2(dy,dx))
-                    l.BackgroundColor3=color; l.BackgroundTransparency=0; l.Visible=true
+                    drawLine(l, sa.X, sa.Y, sb.X, sb.Y, color)
                 end
             end
         end
@@ -733,48 +697,80 @@ local function roleEspTick()
                 if not g.hl then
                     g.hl = Instance.new("Highlight")
                     g.hl.Name="PulseRoleHL"
-                    -- СКВОЗЬ СТЕНЫ
                     g.hl.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop
-                    g.hl.FillTransparency=0.55; g.hl.OutlineTransparency=0
-                    g.hl.Parent=Cam
+                    g.hl.FillTransparency=0.4
+                    g.hl.OutlineTransparency=0
+                    g.hl.Parent=CG
                 end
                 if g.hl.Adornee ~= char then g.hl.Adornee = char end
-                g.hl.FillColor = col; g.hl.OutlineColor = col
+                g.hl.FillColor = col
+                g.hl.OutlineColor = col
                 g.gui.Adornee = hrp
                 g.roleLbl.Visible = V.RoleESP.showRole
-                if V.RoleESP.showRole then g.roleLbl.Text=role; g.roleLbl.TextColor3=col end
+                if V.RoleESP.showRole then
+                    g.roleLbl.Text = role
+                    g.roleLbl.TextColor3 = col
+                end
                 g.nameLbl.Visible = V.RoleESP.showName
-                if V.RoleESP.showName then g.nameLbl.Text = plr.DisplayName end
+                if V.RoleESP.showName then
+                    g.nameLbl.Text = plr.DisplayName
+                    g.nameLbl.TextColor3 = col
+                end
                 g.distLbl.Visible = V.RoleESP.showDist and dist ~= nil
-                if g.distLbl.Visible then g.distLbl.Text = math.floor(dist).." studs" end
+                if g.distLbl.Visible then
+                    g.distLbl.Text = math.floor(dist).." studs"
+                    g.distLbl.TextColor3 = Color3.fromRGB(200,200,200)
+                end
                 local y=0
                 if g.roleLbl.Visible then g.roleLbl.Position=UDim2.new(0,0,0,y); y=y+18 end
                 if g.nameLbl.Visible then g.nameLbl.Position=UDim2.new(0,0,0,y); y=y+15 end
                 if g.distLbl.Visible then g.distLbl.Position=UDim2.new(0,0,0,y) end
                 local cam = Cam; local root = char:FindFirstChild("HumanoidRootPart")
                 if cam and root then
-                    local headSize = (hrp:IsA("BasePart") and hrp.Size.Y or 1)*0.5 + 0.5
-                    local top = hrp.Position + Vector3.new(0, headSize, 0)
-                    local bot = root.Position - Vector3.new(0, 3, 0)
-                    local sTop = cam:WorldToViewportPoint(top); local sBot = cam:WorldToViewportPoint(bot)
-                    if sTop.Z>0 and sBot.Z>0 then
-                        local y1, y2 = sTop.Y, sBot.Y
-                        local h = math.abs(y2-y1)
-                        local cx = (sTop.X+sBot.X)/2
-                        local bX1 = cx - h/4; local bX2 = cx + h/4
-                        if V.RoleESP.box then updateBoxLines(g, bX1, y1, bX2, y2, col)
-                        else for _,l in ipairs(g.box) do l.Visible=false end end
-                        if V.RoleESP.tracer then
-                            local vs = cam.ViewportSize
-                            local dx,dy = cx - vs.X/2, y1 - vs.Y
-                            local len = math.sqrt(dx*dx+dy*dy)
-                            g.tracer.Size=UDim2.fromOffset(len,1)
-                            g.tracer.Position=UDim2.fromOffset((vs.X/2+cx)/2, (vs.Y+y1)/2)
-                            g.tracer.Rotation=math.deg(math.atan2(dy,dx))
-                            g.tracer.BackgroundColor3=col; g.tracer.BackgroundTransparency=0; g.tracer.Visible=true
-                        else g.tracer.Visible=false end
-                        if V.RoleESP.skeleton then updateSkeleton(g, char, cam, col)
-                        else for _,l in ipairs(g.bones) do l.Visible=false end end
+                    local headPart = char:FindFirstChild("Head")
+                    local topPos, botPos
+                    if headPart and headPart:IsA("BasePart") then
+                        topPos = headPart.Position + Vector3.new(0, headPart.Size.Y*0.5, 0)
+                    else
+                        topPos = hrp.Position + Vector3.new(0, 1, 0)
+                    end
+                    botPos = root.Position - Vector3.new(0, 3, 0)
+                    local sTop = cam:WorldToViewportPoint(topPos)
+                    local sBot = cam:WorldToViewportPoint(botPos)
+                    if sTop.Z > 0 and sBot.Z > 0 then
+                        local h = math.abs(sBot.Y - sTop.Y)
+                        if h > 3 then
+                            local cx = (sTop.X + sBot.X) * 0.5
+                            local w = h * 0.55
+                            local bX1 = cx - w*0.5
+                            local bX2 = cx + w*0.5
+                            local bY1 = math.min(sTop.Y, sBot.Y)
+                            local bY2 = math.max(sTop.Y, sBot.Y)
+                            if V.RoleESP.box then
+                                updateBoxLines(g, bX1, bY1, bX2, bY2, col, V.RoleESP.boxStyle)
+                            else
+                                for _,l in ipairs(g.box) do l.Visible=false end
+                            end
+                            if V.RoleESP.tracer then
+                                local vs = cam.ViewportSize
+                                local dx = cx - vs.X*0.5
+                                local dy = bY1 - vs.Y
+                                local len = math.sqrt(dx*dx+dy*dy)
+                                g.tracer.Size=UDim2.fromOffset(len,1)
+                                g.tracer.Position=UDim2.fromOffset((vs.X*0.5+cx)*0.5, (vs.Y+bY1)*0.5)
+                                g.tracer.Rotation=math.deg(math.atan2(dy,dx))
+                                g.tracer.BackgroundColor3=col
+                                g.tracer.BackgroundTransparency=0
+                                g.tracer.Visible=true
+                            else
+                                g.tracer.Visible=false
+                            end
+                            if V.RoleESP.skeleton then
+                                updateSkeleton(g, char, cam, col)
+                            else
+                                for _,l in ipairs(g.bones) do l.Visible=false end
+                            end
+                        end
                     end
                 end
             else
@@ -942,9 +938,7 @@ end
 V.SkinGUI = {gui=nil}
 function V.SkinGUI.open()
     local pg = LP:FindFirstChildOfClass("PlayerGui"); if not pg then return end
-    if V.SkinGUI.gui and V.SkinGUI.gui.Parent then
-        V.SkinGUI.gui.Enabled = not V.SkinGUI.gui.Enabled; return
-    end
+    if V.SkinGUI.gui and V.SkinGUI.gui.Parent then V.SkinGUI.gui.Enabled = not V.SkinGUI.gui.Enabled; return end
     local sg = Instance.new("ScreenGui")
     sg.Name="PulseSkinGUI"; sg.ResetOnSpawn=false; sg.DisplayOrder=200; sg.Parent=pg
     local frame = Instance.new("Frame")
@@ -1018,7 +1012,7 @@ function V.AnimPack.restore(char)
 end
 
 -- ============================================================
--- roles
+-- roles (main / aim)
 -- ============================================================
 local roleCacheMod, roleCache, roleCacheStamp = nil, {}, 0
 local function refreshRoleCache()
@@ -1056,6 +1050,21 @@ local function cachedRole(pl)
     if c=="Murderer" then return "m" end
     if c=="Sheriff" or c=="Hero" then return "s" end
     return getRole(pl)
+end
+
+-- хук для RoleESP — отдаёт реальную роль из игры
+getgenv().__pulseRoleGetter = function(plr)
+    refreshRoleCache()
+    local c = roleCache[plr.Name]
+    if c == "Murderer" then return "Murderer" end
+    if c == "Sheriff" then return "Sheriff" end
+    if c == "Hero" then return "Hero" end
+    if c == "Innocent" then return "Innocent" end
+    -- fallback по тулам
+    local r = getRole(plr)
+    if r == "m" then return "Murderer" end
+    if r == "s" then return "Sheriff" end
+    return nil
 end
 
 local function hum() local c=LP.Character; return c and c:FindFirstChildOfClass("Humanoid") end
@@ -1876,7 +1885,6 @@ local pulseHb = RS.Heartbeat:Connect(function(dt)
     if not ADDON.loaded then return end
     pcall(function()
         updateWings(); V.Sakura.tick(dt); crosshairTick(); wobbleTick(); vfxTick(dt)
-        -- погода: следить за камерой
         if V.Weather.on and V.Weather._fxPart and V.Weather._fxPart.Parent then
             local cf = workspace.CurrentCamera.CFrame
             V.Weather._fxPart.CFrame = CFrame.new(cf.Position + Vector3.new(0, 25, 0))
@@ -2121,7 +2129,6 @@ TabTroll:AddButton({ Name = "TP to Random", Callback = function()
     if hrp and th then hrp.CFrame=th.CFrame+Vector3.new(0,0,3) end
 end })
 
--- VISUALS
 local TabV = Window:MakeTab({ Name = "Visuals", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 TabV:AddSection({ Name = "World" })
 local weatherIdx = 1
@@ -2187,6 +2194,8 @@ TabChams:AddSlider({ Name = "X-Ray Strength", Min=0.1, Max=1, Default=0.75, Incr
 local TabEsp = Window:MakeTab({ Name = "ESP", Icon = "rbxassetid://4483345998", PremiumOnly = false })
 TabEsp:AddToggle({ Name = "Role ESP", Default = false, Callback = function(v) V.RoleESP.set(v) end })
 TabEsp:AddToggle({ Name = "Box", Default = true, Callback = function(v) V.RoleESP.box = v end })
+TabEsp:AddButton({ Name = "Box Style: Full", Callback = function() V.RoleESP.boxStyle = "Full"; MakeNotif("Box", "Full", 2) end })
+TabEsp:AddButton({ Name = "Box Style: Corners", Callback = function() V.RoleESP.boxStyle = "Corners"; MakeNotif("Box", "Corners", 2) end })
 TabEsp:AddToggle({ Name = "Tracer", Default = false, Callback = function(v) V.RoleESP.tracer = v end })
 TabEsp:AddToggle({ Name = "Skeleton", Default = false, Callback = function(v) V.RoleESP.skeleton = v end })
 TabEsp:AddToggle({ Name = "Show Name", Default = true, Callback = function(v) V.RoleESP.showName = v end })
@@ -2233,6 +2242,7 @@ ADDON.unload = function()
     SA.enabled=false; KS.enabled=false; KA.on=false; KA.all=false; autograb_on=false; BT.on=false
     grab_desc_stop()
     getgenv().KNIFE_AIM_RESOLVE = nil
+    getgenv().__pulseRoleGetter = nil
     moveReset(); stopTroll(); stopAntiJump()
     pcall(restore_wb)
     workspace.Gravity = 196.2
