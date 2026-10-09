@@ -38,7 +38,7 @@ local function safe_disconnect(c) if c then pcall(function() c:Disconnect() end)
 -- state
 -- ============================================================
 local SA = { enabled=true, part="Torso", quiet=true, wb=true, wbTemp=nil, antiJump=true,
-    autoPred=true, bestMoment=true, jumpRadar=25, confFloor=0.5,
+    autoPred=true, bestMoment=true, jumpRadar=25, confFloor=0.35,
     wallCheck=true, wallCheckCamera=true }
 local SA_hist, SA_phase = {}, {}
 local KS = { enabled=false, reach=30 }
@@ -66,7 +66,6 @@ local fl = { antifling=false, noafk=false }
 local V = {}
 _G.PulseV = V
 
--- 1. WEATHER
 V.Weather = {on=false, mode="Fog", _conn=nil, _fxPart=nil, _emitters={}}
 local function clearForeign()
     for _, o in ipairs(L:GetChildren()) do
@@ -89,8 +88,7 @@ end
 local function makeWeatherFX(kind)
     destroyWeatherFX()
     local part = Instance.new("Part")
-    part.Name = "PulseWeatherFX"
-    part.Size = Vector3.new(200, 1, 200)
+    part.Name = "PulseWeatherFX"; part.Size = Vector3.new(200,1,200)
     part.Anchored = true; part.CanCollide = false; part.CanQuery = false; part.CanTouch = false
     part.CastShadow = false; part.Transparency = 1
     part.Parent = workspace
@@ -137,29 +135,24 @@ function V.Weather.set(mode)
     local cl  = Instance.new("Clouds");     cl.Name ="PulseClouds"
     local sky = Instance.new("Sky");        sky.Name="PulseSky"
     if mode == "Fog" then
-        atm.Density=0.65; atm.Color=Color3.fromRGB(180,180,200)
-        atm.Decay=Color3.fromRGB(120,120,150); atm.Haze=3
+        atm.Density=0.65; atm.Color=Color3.fromRGB(180,180,200); atm.Decay=Color3.fromRGB(120,120,150); atm.Haze=3
         cl.Cover=0.9; cl.Density=0.7
-        L.FogEnd=250; L.FogStart=0; L.FogColor=Color3.fromRGB(180,180,200)
-        L.Brightness=1.2; L.ClockTime=15
+        L.FogEnd=250; L.FogStart=0; L.FogColor=Color3.fromRGB(180,180,200); L.Brightness=1.2; L.ClockTime=15
         destroyWeatherFX()
     elseif mode == "Rain" then
         atm.Density=0.5; atm.Color=Color3.fromRGB(90,95,110); atm.Decay=Color3.fromRGB(50,50,70)
         cl.Cover=1; cl.Density=1; cl.Color=Color3.fromRGB(80,80,90)
-        L.FogEnd=120; L.FogStart=0; L.FogColor=Color3.fromRGB(90,90,110)
-        L.Brightness=0.7; L.ClockTime=14; L.Ambient=Color3.fromRGB(60,60,80)
+        L.FogEnd=120; L.FogStart=0; L.FogColor=Color3.fromRGB(90,90,110); L.Brightness=0.7; L.ClockTime=14; L.Ambient=Color3.fromRGB(60,60,80)
         makeWeatherFX("Rain")
     elseif mode == "Snow" then
         atm.Density=0.3; atm.Color=Color3.fromRGB(230,235,245); atm.Decay=Color3.fromRGB(200,210,230)
         cl.Cover=0.8; cl.Density=0.4; cl.Color=Color3.fromRGB(240,240,255)
-        L.FogEnd=400; L.FogColor=Color3.fromRGB(230,235,245)
-        L.Brightness=2; L.ClockTime=12; L.Ambient=Color3.fromRGB(180,190,210)
+        L.FogEnd=400; L.FogColor=Color3.fromRGB(230,235,245); L.Brightness=2; L.ClockTime=12; L.Ambient=Color3.fromRGB(180,190,210)
         makeWeatherFX("Snow")
     elseif mode == "Blood" then
         atm.Density=0.8; atm.Color=Color3.fromRGB(120,20,20); atm.Decay=Color3.fromRGB(60,0,0)
         cl.Cover=1; cl.Density=1; cl.Color=Color3.fromRGB(80,10,10)
-        L.FogEnd=100; L.FogColor=Color3.fromRGB(80,10,10)
-        L.Brightness=0.5; L.ClockTime=17; L.Ambient=Color3.fromRGB(60,10,10)
+        L.FogEnd=100; L.FogColor=Color3.fromRGB(80,10,10); L.Brightness=0.5; L.ClockTime=17; L.Ambient=Color3.fromRGB(60,10,10)
         destroyWeatherFX()
     elseif mode == "Night" then
         atm.Density=0.3; atm.Color=Color3.fromRGB(30,30,60); atm.Decay=Color3.fromRGB(10,10,30)
@@ -167,10 +160,8 @@ function V.Weather.set(mode)
         L.FogEnd=500; L.Brightness=0.6; L.ClockTime=0; L.Ambient=Color3.fromRGB(40,40,60)
         destroyWeatherFX()
     else
-        atm.Density=0.2; atm.Color=Color3.fromRGB(199,199,199)
-        cl.Cover=0.1; cl.Density=0.2
-        L.FogEnd=100000; L.Brightness=2
-        destroyWeatherFX()
+        atm.Density=0.2; atm.Color=Color3.fromRGB(199,199,199); cl.Cover=0.1; cl.Density=0.2
+        L.FogEnd=100000; L.Brightness=2; destroyWeatherFX()
     end
     atm.Parent=L; cl.Parent=L; sky.Parent=L
     V.Weather.on=true; V.Weather.mode=mode
@@ -192,7 +183,6 @@ V.Weather.conn = L.ChildAdded:Connect(function(c)
     end
 end)
 
--- 2. FULLBRIGHT
 V.Fullbright = {on=false, _orig={}}
 function V.Fullbright.set(v)
     if v then
@@ -209,14 +199,11 @@ function V.Fullbright.set(v)
     end
 end
 
--- 3. SAKURA
 V.Sakura = {on=false, queue={}, spawned=0, color=Color3.fromRGB(255,183,210)}
 local function makePetal(color)
     local p=Instance.new("Part"); p.Name="PulsePetal"
-    p.Size=Vector3.new(0.4,0.05,0.6); p.Color=color
-    p.Material=Enum.Material.Neon; p.Transparency=0.05
-    p.CanCollide=false; p.CanQuery=false; p.CanTouch=false
-    p.Anchored=true; p.CastShadow=false
+    p.Size=Vector3.new(0.4,0.05,0.6); p.Color=color; p.Material=Enum.Material.Neon; p.Transparency=0.05
+    p.CanCollide=false; p.CanQuery=false; p.CanTouch=false; p.Anchored=true; p.CastShadow=false
     return p
 end
 function V.Sakura.tick(dt)
@@ -258,41 +245,31 @@ function V.Sakura.set(v, color)
     end
 end
 
--- 4. WINGS (FIX: no SetAttribute with Instance)
 V.Wings = {on=false, scale=1, model=nil, feathers={},
     color1=Color3.fromRGB(255,255,255), color2=Color3.fromRGB(255,230,160)}
-
 local function clearWings()
     if V.Wings.model then pcall(function() V.Wings.model:Destroy() end) end
     V.Wings.model = nil
     V.Wings.feathers = {}
 end
-
 local function buildWings(char, scale)
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart"); if not hrp then return end
     clearWings()
     local model = Instance.new("Model"); model.Name="PulseWings"
-
-    local root = Instance.new("Part")
-    root.Name = "PulseWingsRoot"
+    local root = Instance.new("Part"); root.Name = "PulseWingsRoot"
     root.Size=Vector3.new(0.2,0.2,0.2); root.Transparency=1
     root.CanCollide=false; root.Massless=true; root.Anchored=false
     root.CanQuery=false; root.CanTouch=false; root.CastShadow=false
     root.Parent=model
-
-    local rw = Instance.new("Weld")
-    rw.Part0 = hrp; rw.Part1 = root
-    rw.C0 = CFrame.new(0,0.5,0.6)
-    rw.Parent = root
-
+    local rw = Instance.new("Weld"); rw.Part0=hrp; rw.Part1=root
+    rw.C0 = CFrame.new(0,0.5,0.6); rw.Parent = root
     local SEG = 10
     for side=-1,1,2 do
         for i=1,SEG do
             local t = (i-1)/(SEG-1)
             local len = (1.8 + 3.2*(1-t)) * scale
-            local f = Instance.new("Part")
-            f.Name="PulseFeather"
+            local f = Instance.new("Part"); f.Name="PulseFeather"
             f.Size=Vector3.new(0.35*scale, 0.12*scale, len)
             f.Color=V.Wings.color1:Lerp(V.Wings.color2, t*0.7)
             f.Material=Enum.Material.Neon; f.Transparency=0.08
@@ -303,26 +280,15 @@ local function buildWings(char, scale)
             local pl = Instance.new("PointLight",f)
             pl.Color=f.Color; pl.Brightness=1.2; pl.Range=6
             f.Parent=model
-
-            local angY = math.rad(side*(10+t*65))
-            local angX = math.rad(-25+t*70)
-            local angZ = math.rad(side*(-5-t*25))
-            local w = Instance.new("Weld")
-            w.Part0=root; w.Part1=f
+            local angY = math.rad(side*(10+t*65)); local angX = math.rad(-25+t*70); local angZ = math.rad(side*(-5-t*25))
+            local w = Instance.new("Weld"); w.Part0=root; w.Part1=f
             local c0 = CFrame.new(0,0,0)*CFrame.Angles(angX,angY,angZ)*CFrame.new(0,0,-len*0.5)
-            w.C0 = c0
-            w.Parent=f
-
-            table.insert(V.Wings.feathers, {
-                part = f, weld = w, baseC0 = c0,
-                baseCol = f.Color, phase = t, side = side,
-            })
+            w.C0 = c0; w.Parent=f
+            table.insert(V.Wings.feathers, { part=f, weld=w, baseC0=c0, baseCol=f.Color, phase=t, side=side })
         end
     end
-    model.Parent=char
-    V.Wings.model=model
+    model.Parent=char; V.Wings.model=model
 end
-
 local function updateWings()
     if not V.Wings.on then return end
     if not V.Wings.model or not V.Wings.model.Parent then return end
@@ -337,20 +303,15 @@ local function updateWings()
         end
     end
 end
-
 function V.Wings.set(v, scale, c1, c2)
     V.Wings.on = v and true or false
     V.Wings.scale = scale or V.Wings.scale
     if c1 then V.Wings.color1 = c1 end
     if c2 then V.Wings.color2 = c2 end
-    if V.Wings.on then
-        buildWings(LP.Character, V.Wings.scale)
-    else
-        clearWings()
-    end
+    if V.Wings.on then buildWings(LP.Character, V.Wings.scale)
+    else clearWings() end
 end
 
--- 5. CHAMS
 V.Chams = { mat=Enum.Material.ForceField,
     selfColor=Color3.fromRGB(120,200,255), teamColor=Color3.fromRGB(120,255,140),
     gunColor=Color3.fromRGB(255,210,60), _st={}, _wp={}, selfOn=false, teamOn=false, gunOn=false }
@@ -405,7 +366,6 @@ function V.Chams.clearAll()
     V.Chams.clearWeapon()
 end
 
--- 6. GUN ESP
 V.GunESP = {on=false, items={}}
 function V.GunESP.set(v)
     V.GunESP.on = v and true or false
@@ -433,7 +393,6 @@ local function gunEspTick()
     end
 end
 
--- 7. HEADLESS
 V.Headless = {on=false}
 function V.Headless.set(char, v)
     if not char then return end
@@ -460,7 +419,6 @@ function V.Headless.set(char, v)
     V.Headless.on = v
 end
 
--- 8. KORBLOX
 V.Korblox = {on=false, mesh="rbxassetid://6172448159", tex="rbxassetid://6172448533"}
 function V.Korblox.set(char, v)
     if not char then return end
@@ -493,7 +451,6 @@ function V.Korblox.set(char, v)
     V.Korblox.on = v
 end
 
--- 9. XRAY
 V.XRay = {on=false, strength=0.75, _orig={}, _queue={}, _idx=1}
 local function shouldXRay(p)
     if not p:IsA("BasePart") then return false end
@@ -534,7 +491,6 @@ function V.XRay.set(v, strength)
     if not v then for p, tr in pairs(V.XRay._orig) do if p.Parent then pcall(function() p.Transparency=tr end) end end; V.XRay._orig={} end
 end
 
--- 10. ROLE ESP
 V.RoleESP = { on=false,
     murderer=Color3.fromRGB(255,60,60), sheriff=Color3.fromRGB(60,140,255),
     innocent=Color3.fromRGB(60,255,90), hero=Color3.fromRGB(255,200,60),
@@ -589,8 +545,7 @@ end
 local function newLine()
     local f = Instance.new("Frame")
     f.BorderSizePixel=0; f.AnchorPoint=Vector2.new(0.5,0.5)
-    f.BackgroundColor3=Color3.new(1,1,1); f.Visible=false
-    f.ZIndex = 5
+    f.BackgroundColor3=Color3.new(1,1,1); f.Visible=false; f.ZIndex = 5
     f.Parent = V.RoleESP._rootGui
     return f
 end
@@ -633,9 +588,7 @@ local function drawLine(l, ax, ay, bx, by, color)
     l.Size=UDim2.fromOffset(len, 1)
     l.Position=UDim2.fromOffset((ax+bx)/2, (ay+by)/2)
     l.Rotation=math.deg(math.atan2(dy, dx))
-    l.BackgroundColor3=color
-    l.BackgroundTransparency=0
-    l.Visible=true
+    l.BackgroundColor3=color; l.BackgroundTransparency=0; l.Visible=true
 end
 local function updateBoxLines(g, x1, y1, x2, y2, color, style)
     if style == "Corners" then
@@ -711,8 +664,7 @@ local function roleEspTick()
                     g.hl = Instance.new("Highlight")
                     g.hl.Name="PulseRoleHL"
                     g.hl.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop
-                    g.hl.FillTransparency=0.4
-                    g.hl.OutlineTransparency=0
+                    g.hl.FillTransparency=0.4; g.hl.OutlineTransparency=0
                     g.hl.Parent=CG
                 end
                 if g.hl.Adornee ~= char then g.hl.Adornee = char end
@@ -757,9 +709,7 @@ local function roleEspTick()
                                 g.tracer.Size=UDim2.fromOffset(len,1)
                                 g.tracer.Position=UDim2.fromOffset((vs.X*0.5+cx)*0.5, (vs.Y+bY1)*0.5)
                                 g.tracer.Rotation=math.deg(math.atan2(dy,dx))
-                                g.tracer.BackgroundColor3=col
-                                g.tracer.BackgroundTransparency=0
-                                g.tracer.Visible=true
+                                g.tracer.BackgroundColor3=col; g.tracer.BackgroundTransparency=0; g.tracer.Visible=true
                             else g.tracer.Visible=false end
                             if V.RoleESP.skeleton then updateSkeleton(g, char, cam, col)
                             else for _,l in ipairs(g.bones) do l.Visible=false end end
@@ -799,7 +749,6 @@ getgenv().__pulseSkelBones = getgenv().__pulseSkelBones or {
     }
 }
 
--- 11. CROSSHAIR
 V.Crosshair = {on=false, gui=nil}
 function V.Crosshair.set(v)
     V.Crosshair.on = v and true or false
@@ -827,7 +776,6 @@ local function crosshairTick()
     V.Crosshair.gui.Position = UDim2.fromOffset(loc.X, loc.Y)
 end
 
--- 12. WOBBLE
 V.Wobble = {on=false, model=nil, scale=1, parts={}}
 function V.Wobble.build()
     if V.Wobble.model then V.Wobble.model:Destroy() end
@@ -864,7 +812,6 @@ local function wobbleTick()
     end
 end
 
--- 13. VFX
 V.VFX = {on=false, parts={}, colors={Color3.fromRGB(255,60,200),Color3.fromRGB(60,200,255),Color3.fromRGB(255,220,60)}}
 function V.VFX.set(v)
     V.VFX.on = v and true or false
@@ -897,7 +844,6 @@ local function vfxTick(dt)
     end
 end
 
--- 14. MAP FORCEFIELD
 V.MapFF = {on=false, _orig={}}
 function V.MapFF.set(v)
     V.MapFF.on = v and true or false
@@ -925,7 +871,6 @@ local function mapFFTick()
     end
 end
 
--- 15. SKIN GUI
 V.SkinGUI = {gui=nil}
 function V.SkinGUI.open()
     local pg = LP:FindFirstChildOfClass("PlayerGui"); if not pg then return end
@@ -970,7 +915,6 @@ function V.SkinGUI.open()
     V.SkinGUI.gui = sg
 end
 
--- 16. ANIM PACK
 V.AnimPack = {on=false, backed={}, token=0}
 function V.AnimPack.applyPack(char, packIds)
     if not char then return end
@@ -1186,11 +1130,15 @@ local function SA_rayBlocked(a, b, ignore)
 end
 
 local SA_BODY = { "UpperTorso","Torso","LowerTorso","Head","HumanoidRootPart","RightUpperArm","LeftUpperArm","Right Arm","Left Arm" }
+
 local function SA_anyVisible(targetChar, origin)
+    local myChar = LP.Character
+    local ig = { targetChar }
+    if myChar and myChar ~= targetChar then table.insert(ig, myChar) end
     for _, n in ipairs(SA_BODY) do
         local pt = targetChar:FindFirstChild(n)
         if pt and pt:IsA("BasePart") then
-            if not SA_rayBlocked(origin, pt.Position, { targetChar }) then return true end
+            if not SA_rayBlocked(origin, pt.Position, ig) then return true end
         end
     end
     return false
@@ -1199,6 +1147,7 @@ end
 local function SA_wallCheck(origin, targetChar)
     if not SA.wallCheck then return true end
     if not origin or not targetChar then return false end
+    local myChar = LP.Character
     local bodies = {}
     for _, n in ipairs(SA_BODY) do
         local p = targetChar:FindFirstChild(n)
@@ -1206,9 +1155,12 @@ local function SA_wallCheck(origin, targetChar)
     end
     if #bodies==0 then return false end
     local ig = { targetChar }
+    if myChar and myChar ~= targetChar then table.insert(ig, myChar) end
     local function clearFrom(o)
         if not o then return false end
-        for _,p in ipairs(bodies) do if not SA_rayBlocked(o, p.Position, ig) then return true end end
+        for _,p in ipairs(bodies) do
+            if not SA_rayBlocked(o, p.Position, ig) then return true end
+        end
         return false
     end
     if clearFrom(origin) then return true end
@@ -1224,7 +1176,10 @@ local function SA_jumpScore(h2, root)
     local st = h2:GetState()
     if st ~= Enum.HumanoidStateType.Jumping and st ~= Enum.HumanoidStateType.Freefall then return 1.0 end
     local vy = root.AssemblyLinearVelocity.Y
-    if vy>8 then return 0.35 elseif vy>0 then return 0.6 elseif vy>-25 then return 0.9 else return 1.0 end
+    if vy>8 then return 0.55
+    elseif vy>0 then return 0.75
+    elseif vy>-25 then return 0.95
+    else return 1.0 end
 end
 
 local function SA_predict(h2, root, lead)
@@ -1253,21 +1208,24 @@ local function SA_confidence(c, h2, root, muzzle)
     local s = 1
     if SA.antiJump then s = s*SA_jumpScore(h2, root) end
     if SA.wallCheck then
+        local myChar = LP.Character
+        local ig = { c }
+        if myChar and myChar ~= c then table.insert(ig, myChar) end
         local vis, tot = 0, 0
         for _, n in ipairs(SA_BODY) do
             local pt = c:FindFirstChild(n)
             if pt and pt:IsA("BasePart") then
                 tot=tot+1
-                if not SA_rayBlocked(muzzle, pt.Position, { c }) then vis=vis+1 end
+                if not SA_rayBlocked(muzzle, pt.Position, ig) then vis=vis+1 end
             end
         end
-        if tot>0 then s = s*(0.4+0.6*(vis/tot)) end
+        if tot>0 then s = s*(0.5+0.5*(vis/tot)) end
     end
     local phase = SA_phase[c]
     if h2 and h2.MoveDirection.Magnitude>0.1 then
         if phase and phase.lastMd and phase.lastMd.Magnitude>0.1 then
             local dot = h2.MoveDirection.Unit:Dot(phase.lastMd.Unit)
-            if dot<0.5 then s=s*0.7 end
+            if dot<0.5 then s=s*0.85 end
         end
         SA_phase[c] = { lastMd = h2.MoveDirection }
     else
@@ -1309,6 +1267,21 @@ local function get_ws_fn()
     return WSH.m
 end
 
+local function findMuzzle()
+    local myChar = LP.Character; if not myChar then return nil end
+    for _, n in ipairs({
+        "GunRaycastAttachment","GunMuzzleAttachment","MuzzleAttachment","Muzzle","GunMuzzle",
+        "BarrelAttachment","FirePointAttachment","FirePoint",
+    }) do
+        local a = myChar:FindFirstChild(n, true)
+        if a and a:IsA("Attachment") then return a.WorldPosition end
+    end
+    local att = myChar:FindFirstChild("GunRaycastAttachment")
+    if att and att:IsA("Attachment") then return att.WorldPosition end
+    local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+    return myRoot and myRoot.Position
+end
+
 local function resolve()
     if not SA.enabled then return nil end
     if not target_p or not target_p.Character then pcall(refresh_target); if not target_p then return nil end end
@@ -1320,9 +1293,7 @@ local function resolve()
     local lead = math.clamp(EC.rtt, 0.05, 0.45); if lead<0.09 then lead=0.09 end
     local off = SA_predict(h2, root, lead)
     local myChar = LP.Character
-    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
-    local att = myRoot and myRoot:FindFirstChild("GunRaycastAttachment")
-    local muzzle = att and att.WorldPosition or (myRoot and myRoot.Position)
+    local muzzle = findMuzzle()
     if not muzzle then return nil end
     if SA.wallCheck then
         local losMuzzle = SA_wallCheck(muzzle, c)
@@ -1336,6 +1307,8 @@ local function resolve()
     if not SA.wallCheck and SA.wb and SA_rayBlocked(muzzle, root.Position, { c, myChar }) and not SA_anyVisible(c, muzzle) then
         wbSpot = SA_findWbSpot(root, muzzle)
     end
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    local att = myRoot and myRoot:FindFirstChild("GunRaycastAttachment")
     if wbSpot and att then
         SA.wbTemp = { att=att, orig=att.WorldCFrame }
         pcall(function() att.WorldCFrame = CFrame.new(wbSpot) end)
@@ -1389,23 +1362,39 @@ local function install_hooks()
     if cur ~= WSH.m then WSH.m = cur; WSH.hooked = {} end
     if not WSH.hooked then WSH.hooked = {} end
     pcall(function() setreadonly(cur,false) end)
-    local aimCandidates = { "GetMouseTargetCFrame","GetTargetPosition","GetTargetCFrame","GetAimPosition","GetShootCFrame","GetShootTarget","GetBulletOrigin","CalculateAim","ComputeTarget","GetFiringVector","GetShotOrigin","GetGunFireData" }
+    local aimCandidates = {
+        "GetMouseTargetCFrame","GetTargetPosition","GetTargetCFrame","GetAimPosition",
+        "GetShootCFrame","GetShootTarget","GetBulletOrigin","CalculateAim",
+        "ComputeTarget","GetFiringVector","GetShotOrigin","GetGunFireData",
+        "GetAimTarget","GetAimCFrame","GetTargetPos","GetShotPosition","GetShootPosition",
+        "GetBulletTarget","GetFirePosition","GetFireTarget","GetGunTarget",
+    }
     for _, name in ipairs(aimCandidates) do
         if type(cur[name])=="function" and not WSH.hooked[name] then
             local orig = cur[name]
             cur[name] = function(self, ...)
+                local ok_o, orig_r = pcall(orig, self, ...)
                 local pt = resolve()
                 if pt then
-                    local n = select("#", ...)
-                    if n>=2 then return pt end
+                    if ok_o and typeof(orig_r) == "CFrame" then
+                        return CFrame.lookAt(orig_r.Position, pt)
+                    end
+                    if ok_o and typeof(orig_r) == "Vector3" then
+                        return pt
+                    end
+                    local cam = workspace.CurrentCamera
+                    if cam then return CFrame.lookAt(cam.CFrame.Position, pt) end
                     return CFrame.new(pt)
                 end
-                return orig(self, ...)
+                return orig_r
             end
             WSH.hooked[name] = orig
         end
     end
-    local fireCandidates = { "FireServer","Fire","Shoot","FireGun","FireWeapon","FireBullet","ShootGun","TriggerGun" }
+    local fireCandidates = {
+        "FireServer","Fire","Shoot","FireGun","FireWeapon","FireBullet","ShootGun","TriggerGun",
+        "FireGunServer","FireWeaponServer","ShootServer","TriggerFire",
+    }
     for _, name in ipairs(fireCandidates) do
         if type(cur[name])=="function" and not WSH.hooked[name] then
             local orig = cur[name]
@@ -1423,18 +1412,15 @@ local function install_hooks()
 end
 
 -- ============================================================
--- KNIFE SILENT (FIX: hook HandleTouched.FireServer)
+-- KNIFE SILENT
 -- ============================================================
-local knifeHooked = {}  -- [tool] = {origTouched = fn, touched = remote}
-
+local knifeHooked = {}
 local function getKnifeTarget()
     local myChar = LP.Character
     local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
     if not myRoot then return nil end
     local cam = workspace.CurrentCamera
     if not cam then return nil end
-
-    -- 1) цель под прицелом в пределах KS.reach
     local rp2 = RaycastParams.new()
     rp2.FilterType = Enum.RaycastFilterType.Exclude
     rp2.FilterDescendantsInstances = { myChar, cam }
@@ -1448,8 +1434,6 @@ local function getKnifeTarget()
             if hp then return hp end
         end
     end
-
-    -- 2) ближайший живой в пределах KS.reach
     local best, bd = nil, KS.reach
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= LP and p.Character then
@@ -1463,7 +1447,6 @@ local function getKnifeTarget()
     end
     return best
 end
-
 local function hookKnife(tool)
     if knifeHooked[tool] then return end
     local events = tool:FindFirstChild("Events"); if not events then return end
@@ -1483,22 +1466,17 @@ local function hookKnife(tool)
         return origFS(self, part, ...)
     end
 end
-
 local function unhookKnife(tool)
     local h = knifeHooked[tool]; if not h then return end
     pcall(function() h.touched.FireServer = h.origTouched end)
     knifeHooked[tool] = nil
 end
-
 local function tryHookKnife()
     local c = LP.Character; if not c then return end
     local knife = c:FindFirstChild("Knife")
     if knife then hookKnife(knife) end
-    -- clean up hooks for tools no longer present
     for tool, _ in pairs(knifeHooked) do
-        if not tool.Parent or tool.Parent ~= c then
-            unhookKnife(tool)
-        end
+        if not tool.Parent or tool.Parent ~= c then unhookKnife(tool) end
     end
 end
 
@@ -2065,7 +2043,7 @@ TabCombat:AddSlider({ Name = "Jump Radar", Min=5, Max=100, Default=25, Increment
     Color=Color3.fromRGB(86,76,251), Callback=function(v) SA.jumpRadar=v end })
 TabCombat:AddToggle({ Name = "Auto Predict", Default = true, Callback = function(v) SA.autoPred = v end })
 TabCombat:AddToggle({ Name = "Best Moment", Default = true, Callback = function(v) SA.bestMoment = v end })
-TabCombat:AddSlider({ Name = "Confidence Floor", Min=0.1, Max=0.9, Default=0.5, Increment=0.05,
+TabCombat:AddSlider({ Name = "Confidence Floor", Min=0.1, Max=0.9, Default=0.35, Increment=0.05,
     ValueName="score", Color=Color3.fromRGB(86,76,251), Callback=function(v) SA.confFloor=v end })
 TabCombat:AddSection({ Name = "Wall Check" })
 TabCombat:AddToggle({ Name = "Wall Check", Default = true, Callback = function(v) SA.wallCheck = v end })
@@ -2319,7 +2297,6 @@ ADDON.unload = function()
     grab_desc_stop()
     getgenv().KNIFE_AIM_RESOLVE = nil
     getgenv().__pulseRoleGetter = nil
-    -- unhook knives
     for tool, _ in pairs(knifeHooked) do unhookKnife(tool) end
     moveReset(); stopTroll(); stopAntiJump()
     pcall(restore_wb)
@@ -2364,4 +2341,4 @@ end
 
 OrionLib:Init()
 MakeNotif("StarWare", "Loaded · right shift to hide menu", 4)
-print("[addon] v3 ready · knife silent + pulse visuals")
+print("[addon] v3 ready · aim fix + knife silent + pulse visuals")
