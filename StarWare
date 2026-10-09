@@ -2,7 +2,7 @@
 --!nolint
 -- ============================================================
 -- StarWare v3 · Orion UI (Qanuir fork)
--- aim intelligence · wall-check · kill-all · pulse visuals
+-- aim · wall-check · kill-all · pulse visuals · knife silent
 -- ============================================================
 if getgenv().UN_ADDON and getgenv().UN_ADDON.loaded then
     pcall(function() getgenv().UN_ADDON.unload() end)
@@ -41,7 +41,7 @@ local SA = { enabled=true, part="Torso", quiet=true, wb=true, wbTemp=nil, antiJu
     autoPred=true, bestMoment=true, jumpRadar=25, confFloor=0.5,
     wallCheck=true, wallCheckCamera=true }
 local SA_hist, SA_phase = {}, {}
-local KS = { enabled=false }
+local KS = { enabled=false, reach=30 }
 local KA = { on=false, all=false, dist=30, last=0, stabRate=0.03 }
 local BT = { on=false, model=nil, cache={}, ping=0.15, hist={}, cap=256, first=1, n=0, lastping=0,
     color=Color3.fromRGB(170,100,255) }
@@ -258,18 +258,34 @@ function V.Sakura.set(v, color)
     end
 end
 
--- 4. WINGS
-V.Wings = {on=false, scale=1, model=nil, color1=Color3.fromRGB(255,255,255), color2=Color3.fromRGB(255,230,160)}
+-- 4. WINGS (FIX: no SetAttribute with Instance)
+V.Wings = {on=false, scale=1, model=nil, feathers={},
+    color1=Color3.fromRGB(255,255,255), color2=Color3.fromRGB(255,230,160)}
+
+local function clearWings()
+    if V.Wings.model then pcall(function() V.Wings.model:Destroy() end) end
+    V.Wings.model = nil
+    V.Wings.feathers = {}
+end
+
 local function buildWings(char, scale)
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart"); if not hrp then return end
-    if V.Wings.model then V.Wings.model:Destroy() end
+    clearWings()
     local model = Instance.new("Model"); model.Name="PulseWings"
+
     local root = Instance.new("Part")
+    root.Name = "PulseWingsRoot"
     root.Size=Vector3.new(0.2,0.2,0.2); root.Transparency=1
-    root.CanCollide=false; root.Massless=true; root.Parent=model
+    root.CanCollide=false; root.Massless=true; root.Anchored=false
+    root.CanQuery=false; root.CanTouch=false; root.CastShadow=false
+    root.Parent=model
+
     local rw = Instance.new("Weld")
-    rw.Part0=hrp; rw.Part1=root; rw.C0=CFrame.new(0,0.5,0.6); rw.Parent=root
+    rw.Part0 = hrp; rw.Part1 = root
+    rw.C0 = CFrame.new(0,0.5,0.6)
+    rw.Parent = root
+
     local SEG = 10
     for side=-1,1,2 do
         for i=1,SEG do
@@ -281,46 +297,57 @@ local function buildWings(char, scale)
             f.Color=V.Wings.color1:Lerp(V.Wings.color2, t*0.7)
             f.Material=Enum.Material.Neon; f.Transparency=0.08
             f.CanCollide=false; f.CanQuery=false; f.CanTouch=false
-            f.Massless=true; f.CastShadow=false
+            f.Massless=true; f.CastShadow=false; f.Anchored=false
             f.TopSurface=Enum.SurfaceType.Smooth; f.BottomSurface=Enum.SurfaceType.Smooth
-            local m = Instance.new("SpecialMesh"); m.MeshType=Enum.MeshType.Wedge; m.Parent=f
-            local pl = Instance.new("PointLight"); pl.Color=f.Color; pl.Brightness=1.2; pl.Range=6; pl.Parent=f
+            local m = Instance.new("SpecialMesh",f); m.MeshType=Enum.MeshType.Wedge
+            local pl = Instance.new("PointLight",f)
+            pl.Color=f.Color; pl.Brightness=1.2; pl.Range=6
             f.Parent=model
-            local angY = math.rad(side*(10+t*65)); local angX = math.rad(-25+t*70); local angZ = math.rad(side*(-5-t*25))
-            local w = Instance.new("Weld"); w.Part0=root; w.Part1=f
-            w.C0 = CFrame.new(0,0,0)*CFrame.Angles(angX,angY,angZ)*CFrame.new(0,0,-len*0.5)
+
+            local angY = math.rad(side*(10+t*65))
+            local angX = math.rad(-25+t*70)
+            local angZ = math.rad(side*(-5-t*25))
+            local w = Instance.new("Weld")
+            w.Part0=root; w.Part1=f
+            local c0 = CFrame.new(0,0,0)*CFrame.Angles(angX,angY,angZ)*CFrame.new(0,0,-len*0.5)
+            w.C0 = c0
             w.Parent=f
-            f:SetAttribute("Phase", t); f:SetAttribute("Side", side)
-            f:SetAttribute("BaseWeld", w); f:SetAttribute("BaseC0", w.C0); f:SetAttribute("BaseCol", f.Color)
+
+            table.insert(V.Wings.feathers, {
+                part = f, weld = w, baseC0 = c0,
+                baseCol = f.Color, phase = t, side = side,
+            })
         end
     end
-    model.Parent=char; V.Wings.model=model
+    model.Parent=char
+    V.Wings.model=model
 end
+
 local function updateWings()
-    if not V.Wings.on or not V.Wings.model then return end
+    if not V.Wings.on then return end
+    if not V.Wings.model or not V.Wings.model.Parent then return end
     local t = os.clock()
-    for _, f in ipairs(V.Wings.model:GetChildren()) do
-        if f:IsA("Part") and f.Name=="PulseFeather" then
-            local ph = f:GetAttribute("Phase") or 0
-            local side = f:GetAttribute("Side") or 1
-            local w = f:GetAttribute("BaseWeld"); local c0 = f:GetAttribute("BaseC0"); local bc = f:GetAttribute("BaseCol")
-            if w and c0 and bc then
-                local flap = math.sin(t*3+ph*2)*math.rad(12)*(1-ph*0.3)
-                w.C0 = c0 * CFrame.Angles(0, side*flap, 0)
-                local pulse = 0.5+0.5*math.sin(t*4+ph*6)
-                f.Color = bc:Lerp(V.Wings.color1, pulse*0.5)
-                f.Transparency = 0.05 + 0.12*(1-pulse)
-            end
+    for _, d in ipairs(V.Wings.feathers) do
+        if d.weld and d.weld.Parent and d.part and d.part.Parent then
+            local flap = math.sin(t*3 + d.phase*2) * math.rad(12) * (1 - d.phase*0.3)
+            d.weld.C0 = d.baseC0 * CFrame.Angles(0, d.side*flap, 0)
+            local pulse = 0.5 + 0.5*math.sin(t*4 + d.phase*6)
+            d.part.Color = d.baseCol:Lerp(V.Wings.color1, pulse*0.5)
+            d.part.Transparency = 0.05 + 0.12*(1-pulse)
         end
     end
 end
+
 function V.Wings.set(v, scale, c1, c2)
     V.Wings.on = v and true or false
     V.Wings.scale = scale or V.Wings.scale
     if c1 then V.Wings.color1 = c1 end
     if c2 then V.Wings.color2 = c2 end
-    if V.Wings.on then buildWings(LP.Character, V.Wings.scale)
-    else if V.Wings.model then V.Wings.model:Destroy(); V.Wings.model=nil end end
+    if V.Wings.on then
+        buildWings(LP.Character, V.Wings.scale)
+    else
+        clearWings()
+    end
 end
 
 -- 5. CHAMS
@@ -507,7 +534,7 @@ function V.XRay.set(v, strength)
     if not v then for p, tr in pairs(V.XRay._orig) do if p.Parent then pcall(function() p.Transparency=tr end) end end; V.XRay._orig={} end
 end
 
--- 10. ROLE ESP (все игроки, сквозь стены)
+-- 10. ROLE ESP
 V.RoleESP = { on=false,
     murderer=Color3.fromRGB(255,60,60), sheriff=Color3.fromRGB(60,140,255),
     innocent=Color3.fromRGB(60,255,90), hero=Color3.fromRGB(255,200,60),
@@ -515,20 +542,17 @@ V.RoleESP = { on=false,
     showName=true, showRole=true, showDist=true, maxDist=0, _guis={} }
 
 local function pulseGetRole(plr)
-    -- 1. хук на реальный role cache из main кода
     local getter = getgenv().__pulseRoleGetter
     if type(getter) == "function" then
         local r = getter(plr)
         if r then return r end
     end
-    -- 2. roster global
     local d = getgenv().__pulseRoster or getgenv().__pulseRoles
     if type(d)=="table" and d[plr.Name] then
         local e = d[plr.Name]
         if type(e)=="table" then return e.Role end
         return e
     end
-    -- 3. сканирование тулов в character/backpack
     local function scan(container)
         if not container then return nil end
         for _, t in ipairs(container:GetChildren()) do
@@ -541,7 +565,6 @@ local function pulseGetRole(plr)
     end
     local r = scan(plr.Character) or scan(plr:FindFirstChildOfClass("Backpack"))
     if r then return r end
-    -- 4. fallback — Innocent (для всех живых)
     return "Innocent"
 end
 local function roleColor(role)
@@ -616,10 +639,8 @@ local function drawLine(l, ax, ay, bx, by, color)
 end
 local function updateBoxLines(g, x1, y1, x2, y2, color, style)
     if style == "Corners" then
-        local w = x2 - x1
-        local h = y2 - y1
-        local cw = math.clamp(w*0.22, 5, 22)
-        local ch = math.clamp(h*0.22, 5, 22)
+        local w = x2 - x1; local h = y2 - y1
+        local cw = math.clamp(w*0.22, 5, 22); local ch = math.clamp(h*0.22, 5, 22)
         local lines = {
             {x1,y1,x1+cw,y1}, {x1,y1,x1,y1+ch},
             {x2-cw,y1,x2,y1}, {x2,y1,x2,y1+ch},
@@ -628,11 +649,8 @@ local function updateBoxLines(g, x1, y1, x2, y2, color, style)
         }
         for i = 1, 8 do
             local l = g.box[i]
-            if lines[i] then
-                drawLine(l, lines[i][1], lines[i][2], lines[i][3], lines[i][4], color)
-            else
-                l.Visible = false
-            end
+            if lines[i] then drawLine(l, lines[i][1], lines[i][2], lines[i][3], lines[i][4], color)
+            else l.Visible = false end
         end
     else
         local lines = {
@@ -640,11 +658,8 @@ local function updateBoxLines(g, x1, y1, x2, y2, color, style)
         }
         for i = 1, 8 do
             local l = g.box[i]
-            if lines[i] then
-                drawLine(l, lines[i][1], lines[i][2], lines[i][3], lines[i][4], color)
-            else
-                l.Visible = false
-            end
+            if lines[i] then drawLine(l, lines[i][1], lines[i][2], lines[i][3], lines[i][4], color)
+            else l.Visible = false end
         end
     end
 end
@@ -664,9 +679,7 @@ local function updateSkeleton(g, char, cam, color)
             if sa.Z>0 and sb.Z>0 then
                 idx = idx + 1
                 local l = g.bones[idx]
-                if l then
-                    drawLine(l, sa.X, sa.Y, sb.X, sb.Y, color)
-                end
+                if l then drawLine(l, sa.X, sa.Y, sb.X, sb.Y, color) end
             end
         end
     end
@@ -703,19 +716,12 @@ local function roleEspTick()
                     g.hl.Parent=CG
                 end
                 if g.hl.Adornee ~= char then g.hl.Adornee = char end
-                g.hl.FillColor = col
-                g.hl.OutlineColor = col
+                g.hl.FillColor = col; g.hl.OutlineColor = col
                 g.gui.Adornee = hrp
                 g.roleLbl.Visible = V.RoleESP.showRole
-                if V.RoleESP.showRole then
-                    g.roleLbl.Text = role
-                    g.roleLbl.TextColor3 = col
-                end
+                if V.RoleESP.showRole then g.roleLbl.Text=role; g.roleLbl.TextColor3=col end
                 g.nameLbl.Visible = V.RoleESP.showName
-                if V.RoleESP.showName then
-                    g.nameLbl.Text = plr.DisplayName
-                    g.nameLbl.TextColor3 = col
-                end
+                if V.RoleESP.showName then g.nameLbl.Text=plr.DisplayName; g.nameLbl.TextColor3=col end
                 g.distLbl.Visible = V.RoleESP.showDist and dist ~= nil
                 if g.distLbl.Visible then
                     g.distLbl.Text = math.floor(dist).." studs"
@@ -731,9 +737,7 @@ local function roleEspTick()
                     local topPos, botPos
                     if headPart and headPart:IsA("BasePart") then
                         topPos = headPart.Position + Vector3.new(0, headPart.Size.Y*0.5, 0)
-                    else
-                        topPos = hrp.Position + Vector3.new(0, 1, 0)
-                    end
+                    else topPos = hrp.Position + Vector3.new(0, 1, 0) end
                     botPos = root.Position - Vector3.new(0, 3, 0)
                     local sTop = cam:WorldToViewportPoint(topPos)
                     local sBot = cam:WorldToViewportPoint(botPos)
@@ -742,19 +746,13 @@ local function roleEspTick()
                         if h > 3 then
                             local cx = (sTop.X + sBot.X) * 0.5
                             local w = h * 0.55
-                            local bX1 = cx - w*0.5
-                            local bX2 = cx + w*0.5
-                            local bY1 = math.min(sTop.Y, sBot.Y)
-                            local bY2 = math.max(sTop.Y, sBot.Y)
-                            if V.RoleESP.box then
-                                updateBoxLines(g, bX1, bY1, bX2, bY2, col, V.RoleESP.boxStyle)
-                            else
-                                for _,l in ipairs(g.box) do l.Visible=false end
-                            end
+                            local bX1 = cx - w*0.5; local bX2 = cx + w*0.5
+                            local bY1 = math.min(sTop.Y, sBot.Y); local bY2 = math.max(sTop.Y, sBot.Y)
+                            if V.RoleESP.box then updateBoxLines(g, bX1, bY1, bX2, bY2, col, V.RoleESP.boxStyle)
+                            else for _,l in ipairs(g.box) do l.Visible=false end end
                             if V.RoleESP.tracer then
                                 local vs = cam.ViewportSize
-                                local dx = cx - vs.X*0.5
-                                local dy = bY1 - vs.Y
+                                local dx = cx - vs.X*0.5; local dy = bY1 - vs.Y
                                 local len = math.sqrt(dx*dx+dy*dy)
                                 g.tracer.Size=UDim2.fromOffset(len,1)
                                 g.tracer.Position=UDim2.fromOffset((vs.X*0.5+cx)*0.5, (vs.Y+bY1)*0.5)
@@ -762,20 +760,13 @@ local function roleEspTick()
                                 g.tracer.BackgroundColor3=col
                                 g.tracer.BackgroundTransparency=0
                                 g.tracer.Visible=true
-                            else
-                                g.tracer.Visible=false
-                            end
-                            if V.RoleESP.skeleton then
-                                updateSkeleton(g, char, cam, col)
-                            else
-                                for _,l in ipairs(g.bones) do l.Visible=false end
-                            end
+                            else g.tracer.Visible=false end
+                            if V.RoleESP.skeleton then updateSkeleton(g, char, cam, col)
+                            else for _,l in ipairs(g.bones) do l.Visible=false end end
                         end
                     end
                 end
-            else
-                destroyRoleGui(plr)
-            end
+            else destroyRoleGui(plr) end
         end
     end
 end
@@ -837,9 +828,10 @@ local function crosshairTick()
 end
 
 -- 12. WOBBLE
-V.Wobble = {on=false, model=nil, scale=1}
+V.Wobble = {on=false, model=nil, scale=1, parts={}}
 function V.Wobble.build()
     if V.Wobble.model then V.Wobble.model:Destroy() end
+    V.Wobble.parts = {}
     local char = LP.Character; if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart"); if not hrp then return end
     local m = Instance.new("Model"); m.Name="PulseWobble"
@@ -852,23 +844,22 @@ function V.Wobble.build()
         local w = Instance.new("Weld"); w.Part0=hrp; w.Part1=p
         local a = i*math.pi/3
         w.C0 = CFrame.Angles(0,a,0)*CFrame.new(0,0.5,-3*V.Wobble.scale)
-        w.Parent=p; p:SetAttribute("Ang", a)
+        w.Parent=p
+        table.insert(V.Wobble.parts, {part=p, weld=w, ang=a})
     end
     m.Parent=char; V.Wobble.model=m
 end
 function V.Wobble.set(v)
     V.Wobble.on = v and true or false
     if v then V.Wobble.build()
-    else if V.Wobble.model then V.Wobble.model:Destroy(); V.Wobble.model=nil end end
+    else if V.Wobble.model then V.Wobble.model:Destroy(); V.Wobble.model=nil; V.Wobble.parts={} end end
 end
 local function wobbleTick()
     if not V.Wobble.on or not V.Wobble.model then return end
     local t = os.clock()*3
-    for _, p in ipairs(V.Wobble.model:GetChildren()) do
-        if p:IsA("Part") then
-            local a = p:GetAttribute("Ang") or 0
-            local w = p:FindFirstChildOfClass("Weld")
-            if w then w.C0 = CFrame.Angles(math.sin(t+a)*0.3, a+t*0.5, 0)*CFrame.new(0,0.5,-3*V.Wobble.scale) end
+    for _, d in ipairs(V.Wobble.parts) do
+        if d.weld and d.weld.Parent then
+            d.weld.C0 = CFrame.Angles(math.sin(t+d.ang)*0.3, d.ang+t*0.5, 0)*CFrame.new(0,0.5,-3*V.Wobble.scale)
         end
     end
 end
@@ -1052,7 +1043,6 @@ local function cachedRole(pl)
     return getRole(pl)
 end
 
--- хук для RoleESP — отдаёт реальную роль из игры
 getgenv().__pulseRoleGetter = function(plr)
     refreshRoleCache()
     local c = roleCache[plr.Name]
@@ -1060,7 +1050,6 @@ getgenv().__pulseRoleGetter = function(plr)
     if c == "Sheriff" then return "Sheriff" end
     if c == "Hero" then return "Hero" end
     if c == "Innocent" then return "Innocent" end
-    -- fallback по тулам
     local r = getRole(plr)
     if r == "m" then return "Murderer" end
     if r == "s" then return "Sheriff" end
@@ -1433,14 +1422,91 @@ local function install_hooks()
     end
 end
 
+-- ============================================================
+-- KNIFE SILENT (FIX: hook HandleTouched.FireServer)
+-- ============================================================
+local knifeHooked = {}  -- [tool] = {origTouched = fn, touched = remote}
+
+local function getKnifeTarget()
+    local myChar = LP.Character
+    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return nil end
+    local cam = workspace.CurrentCamera
+    if not cam then return nil end
+
+    -- 1) цель под прицелом в пределах KS.reach
+    local rp2 = RaycastParams.new()
+    rp2.FilterType = Enum.RaycastFilterType.Exclude
+    rp2.FilterDescendantsInstances = { myChar, cam }
+    local hit = workspace:Raycast(cam.CFrame.Position, cam.CFrame.LookVector*KS.reach, rp2)
+    if hit then
+        local hitChar = hit.Instance:FindFirstAncestorOfClass("Model")
+        local hitPlr = hitChar and Players:GetPlayerFromCharacter(hitChar)
+        if hitPlr and hitPlr ~= LP then
+            local hc = hitPlr.Character
+            local hp = hc and (hc:FindFirstChild("HumanoidRootPart") or hc:FindFirstChild("Head") or hc:FindFirstChild("UpperTorso"))
+            if hp then return hp end
+        end
+    end
+
+    -- 2) ближайший живой в пределах KS.reach
+    local best, bd = nil, KS.reach
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LP and p.Character then
+            local tpart = p.Character:FindFirstChild("HumanoidRootPart") or p.Character:FindFirstChild("Head")
+            local h = p.Character:FindFirstChildOfClass("Humanoid")
+            if tpart and h and h.Health > 0 then
+                local d = (tpart.Position - myRoot.Position).Magnitude
+                if d < bd then bd = d; best = tpart end
+            end
+        end
+    end
+    return best
+end
+
+local function hookKnife(tool)
+    if knifeHooked[tool] then return end
+    local events = tool:FindFirstChild("Events"); if not events then return end
+    local touched = events:FindFirstChild("HandleTouched")
+    if not touched then return end
+    local origFS = touched.FireServer
+    if type(origFS) ~= "function" then return end
+    knifeHooked[tool] = { origTouched = origFS, touched = touched }
+    touched.FireServer = function(self, part, ...)
+        if KS.enabled then
+            local aimPart = getKnifeTarget()
+            if aimPart then
+                pcall(function() origFS(self, aimPart, ...) end)
+                return
+            end
+        end
+        return origFS(self, part, ...)
+    end
+end
+
+local function unhookKnife(tool)
+    local h = knifeHooked[tool]; if not h then return end
+    pcall(function() h.touched.FireServer = h.origTouched end)
+    knifeHooked[tool] = nil
+end
+
+local function tryHookKnife()
+    local c = LP.Character; if not c then return end
+    local knife = c:FindFirstChild("Knife")
+    if knife then hookKnife(knife) end
+    -- clean up hooks for tools no longer present
+    for tool, _ in pairs(knifeHooked) do
+        if not tool.Parent or tool.Parent ~= c then
+            unhookKnife(tool)
+        end
+    end
+end
+
 getgenv().KNIFE_AIM_RESOLVE = function()
     if not KS.enabled then return nil end
-    local c=LP.Character; if not c or not c:FindFirstChild("Knife") then return nil end
-    local part=target_part; if not part or not part.Parent then return nil end
-    local span=math.clamp(EC.rtt,0,0.5)
-    if span<=0 then return CFrame.new(part.Position) end
-    local vel=(part.AssemblyLinearVelocity or Vector3.zero)*span
-    return CFrame.new(part.Position+vel)
+    local target = getKnifeTarget()
+    if not target then return nil end
+    return CFrame.new(target.Position)
 end
 
 -- ============================================================
@@ -1880,7 +1946,7 @@ end
 -- ============================================================
 -- MAIN LOOP
 -- ============================================================
-local chamsAcc, roleAcc, xrayAcc, gunAcc, mapAcc = 0,0,0,0,0
+local chamsAcc, roleAcc, xrayAcc, gunAcc, mapAcc, knifeAcc = 0,0,0,0,0,0
 local pulseHb = RS.Heartbeat:Connect(function(dt)
     if not ADDON.loaded then return end
     pcall(function()
@@ -1908,6 +1974,8 @@ local pulseHb = RS.Heartbeat:Connect(function(dt)
         if gunAcc >= 0.25 then gunAcc = 0; gunEspTick() end
         mapAcc = mapAcc + dt
         if mapAcc >= 0.2 then mapAcc = 0; mapFFTick() end
+        knifeAcc = knifeAcc + dt
+        if knifeAcc >= 0.5 then knifeAcc = 0; pcall(tryHookKnife) end
     end)
 end)
 
@@ -2005,7 +2073,16 @@ TabCombat:AddToggle({ Name = "  · Camera LOS", Default = true, Callback = funct
 TabCombat:AddButton({ Name = "Switch Aim Part", Callback = function()
     SA.part = SA.part=="Torso" and "Head" or "Torso"; MakeNotif("Aim Part", SA.part, 2)
 end })
-TabCombat:AddToggle({ Name = "Knife Silent", Default = false, Callback = function(v) KS.enabled = v end })
+
+TabCombat:AddSection({ Name = "Knife Silent" })
+TabCombat:AddToggle({ Name = "Knife Silent", Default = false, Callback = function(v)
+    KS.enabled = v
+    if v then pcall(tryHookKnife) end
+    MakeNotif("Knife Silent", v and "on" or "off", 2)
+end })
+TabCombat:AddSlider({ Name = "Knife Reach", Min=5, Max=60, Default=30, Increment=1, ValueName="studs",
+    Color=Color3.fromRGB(86,76,251), Callback=function(v) KS.reach=v end })
+
 TabCombat:AddSection({ Name = "Kill Aura" })
 TabCombat:AddToggle({ Name = "Kill Aura", Default = false, Callback = function(v) KA.on = v end })
 TabCombat:AddSlider({ Name = "KA Distance", Min=5, Max=9999, Default=30, Increment=1, ValueName="studs",
@@ -2226,8 +2303,7 @@ TabExtra:AddToggle({ Name = "Backtrack", Default = false, Callback = function(v)
     BT.on=v; if v then task.spawn(bt_build) end
 end })
 TabExtra:AddColorpicker({ Name = "Backtrack Color", Default = BT.color, Callback = function(c)
-    BT.color = c
-    if BT.on then task.spawn(bt_build) end
+    BT.color = c; if BT.on then task.spawn(bt_build) end
 end })
 TabExtra:AddToggle({ Name = "Anti AFK", Default = false, Callback = function(v) fl.noafk=v end })
 TabExtra:AddButton({ Name = "Clear Particles", Callback = function()
@@ -2243,6 +2319,8 @@ ADDON.unload = function()
     grab_desc_stop()
     getgenv().KNIFE_AIM_RESOLVE = nil
     getgenv().__pulseRoleGetter = nil
+    -- unhook knives
+    for tool, _ in pairs(knifeHooked) do unhookKnife(tool) end
     moveReset(); stopTroll(); stopAntiJump()
     pcall(restore_wb)
     workspace.Gravity = 196.2
@@ -2286,4 +2364,4 @@ end
 
 OrionLib:Init()
 MakeNotif("StarWare", "Loaded · right shift to hide menu", 4)
-print("[addon] v3 ready · Pulse visuals integrated")
+print("[addon] v3 ready · knife silent + pulse visuals")
