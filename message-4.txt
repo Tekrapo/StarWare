@@ -1,0 +1,3286 @@
+-- Atlas adapter: MurderMystery2
+
+-- Atlas hub / MM2: Main, ESP, Player, Config.
+
+local Players = game:GetService("Players")
+
+local RS = game:GetService("ReplicatedStorage")
+
+local CS = game:GetService("CollectionService")
+
+local RunService = game:GetService("RunService")
+
+local UIS = game:GetService("UserInputService")
+
+local Lighting = game:GetService("Lighting")
+
+local Paths = game:GetService("PathfindingService")
+
+local TextService = game:GetService("TextService")
+
+local Player = Players.LocalPlayer
+
+local ENV = (typeof(getgenv) == "function" and getgenv()) or _G
+
+assert(game.GameId == 66654135, "This script belongs to Murder Mystery 2.")
+
+if ENV.ATLAS_MM2 then ENV.ATLAS_MM2.Stop() end
+
+local ATLAS_BASE = tostring(ENV.ATLAS_BASE or "https://getatlas.lol/lib/")
+
+local ATLAS_TOKEN = tostring(ENV.ATLAS_TOKEN or "")
+
+local Library
+
+do
+
+    local source
+
+    local prefetch = ENV.ATLAS_PREFETCH
+
+    if type(prefetch) == "table" then
+
+        local started = os.clock()
+
+        while prefetch.noir == nil and os.clock() - started < 15 do task.wait() end
+
+        if type(prefetch.noir) == "string" then source = prefetch.noir end
+
+    end
+
+    if not source then
+
+        local url = ATLAS_BASE .. "NOIR.lua"
+
+        if ATLAS_TOKEN ~= "" then url ..= "?token=" .. game:GetService("HttpService"):UrlEncode(ATLAS_TOKEN) end
+
+        local ok, body = pcall(function() return game:HttpGet(url) end)
+
+        if ok and type(body) == "string" and body:find("return Library", 1, true) then source = body end
+
+    end
+
+    assert(source, "Could not load NOIR for Atlas hub.")
+
+    local old = ENV.NOIR_LIB_ONLY
+
+    ENV.NOIR_LIB_ONLY = true
+
+    local ok, result = pcall(function() return assert(loadstring(source, "=NOIR"))() end)
+
+    ENV.NOIR_LIB_ONLY = old
+
+    assert(ok and type(result) == "table", tostring(result))
+
+    Library = result
+
+end
+
+
+
+--// Atlas PNG branding (generated).
+
+do
+
+    local globals = type(getfenv) == "function" and getfenv() or _G
+
+    local ENV = type(globals.getgenv) == "function" and globals.getgenv() or _G
+
+    local function envFunction(name) return globals[name] or ENV[name] or _G[name] end
+
+    local function namespaceFunction(group, name)
+
+        local value = globals[group] or ENV[group] or _G[group]
+
+        return type(value) == "table" and value[name] or nil
+
+    end
+
+    local function requestFunction()
+
+        return envFunction("request") or envFunction("http_request") or envFunction("httprequest")
+
+            or namespaceFunction("http", "request") or namespaceFunction("syn", "request")
+
+    end
+
+-- Official Atlas PNGs. Keep original pixels and colors independent of UI themes.
+
+local AtlasBrandAssets = {
+
+    logo = { path = "ATLAS/brand/logo-a81f38a8516b.png" },
+
+    minimized = { path = "ATLAS/brand/minimized-f72da9728242.png" },
+
+}
+
+local AtlasBrandResolved, AtlasBrandPending = {}, {}
+
+-- Cache-only consumer: networking belongs exclusively to the loader.
+
+local function AtlasBrandResolve(kind)
+
+    if AtlasBrandResolved[kind] then return AtlasBrandResolved[kind] end
+
+    local spec = AtlasBrandAssets[kind]
+
+    local custom = envFunction("getcustomasset") or envFunction("getsynasset") or namespaceFunction("syn", "getcustomasset")
+
+    local read, exists = envFunction("readfile"), envFunction("isfile")
+
+    if not custom or not read or not exists then return nil end
+
+    local ok, asset = pcall(function()
+
+        assert(exists(spec.path), "Run the Atlas hub loader to cache the brand images")
+
+        assert(read(spec.path):sub(1,8) == "\137PNG\r\n\26\n", "Invalid brand cache; run the loader again")
+
+        return custom(spec.path)
+
+    end)
+
+    if ok then AtlasBrandResolved[kind] = asset; return asset end
+
+    warn("[Atlas hub] Brand image unavailable: " .. tostring(asset))
+
+end
+
+local function AtlasBrandImage(parent, kind, zIndex)
+
+    local image = Instance.new("ImageLabel")
+
+    image.Name = kind == "minimized" and "AtlasMinimizedIcon" or "AtlasLogo"
+
+    image.BackgroundTransparency = 1
+
+    image.BorderSizePixel = 0
+
+    if kind == "minimized" then
+
+        -- The supplied PNG is RGB: its black outer corners are opaque.
+
+        -- Mask the image itself, not its transparent button parent.
+
+        local mask = Instance.new("UICorner")
+
+        mask.Name = "AtlasIconMask"
+
+        mask.CornerRadius = UDim.new(0.235, 0)
+
+        mask:SetAttribute("NoTheme", true)
+
+        mask:SetAttribute("NoGradient", true)
+
+        mask.Parent = image
+
+    end
+
+    image.Size = UDim2.fromScale(1, 1)
+
+    image.ImageColor3 = Color3.new(1, 1, 1)
+
+    image.ScaleType = Enum.ScaleType.Fit
+
+    image.ZIndex = zIndex or parent.ZIndex
+
+    image:SetAttribute("NoTheme", true)
+
+    image:SetAttribute("NoGradient", true)
+
+    -- Roblox can downsample custom PNGs. Crop against the loaded texture size,
+
+    
+
+    local function fitTexture()
+
+        -- ContentImageSize may require RobloxScript capability.
+
+        -- Official cached PNGs are uploaded as 1024px textures.
+
+        local ok, texture = pcall(function() return image.ContentImageSize end)
+
+        if not ok or not texture or texture.X <= 0 or texture.Y <= 0 then
+
+            texture = Vector2.new(1024, 1024)
+
+        end
+
+        if texture.X <= 0 or texture.Y <= 0 then return end
+
+        local start, extent = kind == "minimized" and 272 or 128, kind == "minimized" and 710 or 1024
+
+        image.ImageRectOffset = Vector2.new(math.floor(texture.X * start / 1254 + 0.5), math.floor(texture.Y * start / 1254 + 0.5))
+
+        image.ImageRectSize = Vector2.new(math.floor(texture.X * extent / 1254 + 0.5), math.floor(texture.Y * extent / 1254 + 0.5))
+
+    end
+
+    image:GetPropertyChangedSignal("IsLoaded"):Connect(fitTexture)
+
+    image.Parent = parent
+
+    task.spawn(function()
+
+        local deadline = os.clock() + 20
+
+        while image.Parent and not image.IsLoaded and os.clock() < deadline do task.wait(0.05) end
+
+        if image.Parent then fitTexture() end
+
+    end)
+
+    if AtlasBrandResolved[kind] then image.Image = AtlasBrandResolved[kind]; fitTexture(); return image end
+
+    task.spawn(function()
+
+        if AtlasBrandPending[kind] then
+
+            repeat task.wait() until not AtlasBrandPending[kind]
+
+        else
+
+            AtlasBrandPending[kind] = true
+
+            AtlasBrandResolve(kind)
+
+            AtlasBrandPending[kind] = nil
+
+        end
+
+        if image.Parent and AtlasBrandResolved[kind] then image.Image = AtlasBrandResolved[kind]; fitTexture() end
+
+    end)
+
+    return image
+
+end
+
+
+
+    -- Apply official PNGs even when an older NOIR version is hosted on the API.
+
+    if Library.AtlasBrandVersion ~= "png-rounded-v3" then
+
+        Library.AtlasBrandVersion = "png-rounded-v3"
+
+        local root = Library.ScreenGui
+
+        local connections = {}
+
+        local function bind(signal, fn) table.insert(connections, signal:Connect(fn)) end
+
+        local function protect(node)
+
+            node:SetAttribute("NoTheme", true)
+
+            node:SetAttribute("NoGradient", true)
+
+        end
+
+        local function replace(holder, kind, z)
+
+            if holder:GetAttribute("AtlasPNGApplied") then return end
+
+            holder:SetAttribute("AtlasPNGApplied", true)
+
+            protect(holder)
+
+            holder.BackgroundTransparency = 1
+
+            holder.BorderSizePixel = 0
+
+            for _,child in ipairs(holder:GetChildren()) do
+
+                if child:IsA("GuiObject") then
+
+                    if child.Name == "Shadow" then child.Visible = false
+
+                    elseif child.Size == UDim2.fromOffset(24,24) and kind == "logo" then
+
+                        -- Keep the key system's lock badge.
+
+                    else child:Destroy() end
+
+                elseif child:IsA("UIGradient") then child.Enabled = false
+
+                elseif child:IsA("UIStroke") then
+
+                    protect(child); child.Transparency = 1
+
+                    bind(child:GetPropertyChangedSignal("Transparency"), function()
+
+                        if child.Transparency ~= 1 then child.Transparency = 1 end
+
+                    end)
+
+                end
+
+            end
+
+            AtlasBrandImage(holder, kind, z)
+
+            bind(holder:GetPropertyChangedSignal("BackgroundTransparency"), function()
+
+                if holder.BackgroundTransparency ~= 1 then holder.BackgroundTransparency = 1 end
+
+            end)
+
+        end
+
+        local function apply()
+
+            if not root or not root.Parent then return end
+
+            local bubble = root:FindFirstChild("MinimizedBubble", true)
+
+            if bubble and bubble:IsA("GuiButton") then
+
+                bubble.Size = UDim2.fromOffset(68,68)
+
+                replace(bubble, "minimized", 46)
+
+            end
+
+            local mobile = root:FindFirstChild("MobileToggle", true)
+
+            if mobile and mobile:IsA("GuiButton") then
+
+                mobile.Size = UDim2.fromOffset(60,60); mobile.Text = ""
+
+                replace(mobile, "minimized", 41)
+
+            end
+
+            local brand = root:FindFirstChild("Brand", true)
+
+            if brand then
+
+                for _,node in ipairs(brand:GetChildren()) do
+
+                    if node:IsA("Frame") then
+
+                        node.Size = UDim2.fromOffset(42,42)
+
+                        node.Position = UDim2.new(0,12,0.5,0)
+
+                        replace(node, "logo", node.ZIndex + 1)
+
+                    elseif node:IsA("TextLabel") then
+
+                        node.Position = UDim2.fromOffset(64,node.Position.Y.Offset)
+
+                        node.Size = UDim2.new(1,-72,0,node.Size.Y.Offset)
+
+                    end
+
+                end
+
+            end
+
+            local keyUI = root:FindFirstChild("KeySystem", true)
+
+            if keyUI then
+
+                for _,node in ipairs(keyUI:GetDescendants()) do
+
+                    if node:IsA("Frame") and node.Size == UDim2.fromOffset(52,52) and node.ZIndex == 72 then
+
+                        replace(node, "logo", 73)
+
+                    end
+
+                end
+
+            end
+
+        end
+
+        local queued = false
+
+        if root then
+
+            bind(root.DescendantAdded, function()
+
+                if queued then return end
+
+                queued = true
+
+                task.defer(function() queued = false; apply() end)
+
+            end)
+
+            bind(root.Destroying, function()
+
+                for _,connection in ipairs(connections) do connection:Disconnect() end
+
+            end)
+
+        end
+
+        local originalCreate = Library.CreateWindow
+
+        Library.CreateWindow = function(self, config)
+
+            config = config or {}; config.Logo = "peak"
+
+            local window = originalCreate(self, config)
+
+            apply()
+
+            return window
+
+        end
+
+        apply()
+
+    end
+
+    -- Immediate icon handoff, including legacy hosted libraries.
+
+    if not Library.AtlasIconMotionVersion then
+
+        Library.AtlasIconMotionVersion = true
+
+        local root = Library.ScreenGui
+
+        local function syncIcons()
+
+            if not root or not root.Parent then return end
+
+            local bubble = root:FindFirstChild("MinimizedBubble", true)
+
+            if bubble and (Library.Open or not Library.Minimized) then bubble.Visible = false end
+
+            local mobile = root:FindFirstChild("MobileToggle", true)
+
+            if mobile then mobile.Visible = not Library.Open and not Library.Minimized end
+
+        end
+
+        local installedOpen
+
+        local function installOpen()
+
+            if type(Library.SetOpen) ~= "function" or Library.SetOpen == installedOpen then return end
+
+            local openWindow = Library.SetOpen
+
+            installedOpen = function(self, open)
+
+                if open then
+
+                    self.Minimized = false
+
+                    local bubble = root and root:FindFirstChild("MinimizedBubble", true)
+
+                    if bubble then bubble.Visible = false end
+
+                end
+
+                openWindow(self, open)
+
+                syncIcons()
+
+            end
+
+            Library.SetOpen = installedOpen
+
+        end
+
+        local originalMinimized
+
+        local function installMinimize()
+
+            if type(Library.SetMinimized) ~= "function" or Library.SetMinimized == originalMinimized then return end
+
+            originalMinimized = Library.SetMinimized
+
+            local minimize = originalMinimized
+
+            local wrapped
+
+            wrapped = function(self, value)
+
+                if self.Unloaded or value == self.Minimized then return end
+
+                local bubble = root and root:FindFirstChild("MinimizedBubble", true)
+
+                if bubble and not value then bubble.Visible = false end
+
+                minimize(self, value)
+
+                if bubble then
+
+                    bubble.Visible = value
+
+                    local scale = bubble:FindFirstChildWhichIsA("UIScale")
+
+                    if scale then scale.Scale = 1 end
+
+                end
+
+                if value and self.Window and self.Window.Frame then self.Window.Frame.Visible = false end
+
+                syncIcons()
+
+            end
+
+            Library.SetMinimized = wrapped
+
+            originalMinimized = wrapped
+
+        end
+
+        -- SetMinimized is defined by CreateWindow, not the base library.
+
+        local originalCreate = Library.CreateWindow
+
+        Library.CreateWindow = function(self, config)
+
+            local window = originalCreate(self, config)
+
+            installOpen()
+
+            installMinimize()
+
+            syncIcons()
+
+            return window
+
+        end
+
+        installOpen()
+
+        installMinimize()
+
+        syncIcons()
+
+    end
+
+end
+
+--// End Atlas PNG branding.
+
+
+
+--// Atlas access gate (generated).
+
+-- Protocol compatibility only: no permanent credentials in URLs and no vendor-specific assumptions.
+
+local function AtlasProtocolCreate(globals, env, HttpService)
+
+    local adapter = {}
+
+    local function member(source, name)
+
+        local ok, value = pcall(function() return source and source[name] end)
+
+        return ok and value or nil
+
+    end
+
+    local requests, seen = {}, {}
+
+    for _, source in ipairs({globals, env, _G}) do
+
+        for _, name in ipairs({"request", "http_request", "httprequest"}) do
+
+            local fn = member(source, name)
+
+            if type(fn)=="function" and not seen[fn] then seen[fn]=true;table.insert(requests,fn) end
+
+        end
+
+        for _, group in ipairs({"http", "syn"}) do
+
+            local fn = member(member(source,group),"request")
+
+            if type(fn)=="function" and not seen[fn] then seen[fn]=true;table.insert(requests,fn) end
+
+        end
+
+    end
+
+    adapter.capabilities = {request=#requests>0, json=true, clipboard=false}
+
+    for _, source in ipairs({globals, env, _G}) do
+
+        local fn = member(source,"setclipboard") or member(source,"toclipboard")
+
+        if type(fn)=="function" then adapter.clipboard=fn;adapter.capabilities.clipboard=true;break end
+
+    end
+
+    function adapter.post(url, fields, token)
+
+        local encoded, body = pcall(HttpService.JSONEncode,HttpService,fields)
+
+        if not encoded then return nil,"Your environment does not support JSON encoding required by this loader." end
+
+        local headers = {["Content-Type"]="application/json"}
+
+        if token then headers.Authorization="Bearer "..token end
+
+        local function result(response)
+
+            if type(response)~="table" then return nil end
+
+            local ok, value=pcall(HttpService.JSONDecode,HttpService,response.Body or response.body)
+
+            if not ok or type(value)~="table" then return nil end
+
+            local status=tonumber(response.StatusCode or response.status_code or response.Status or response.status)
+
+            if status and (status<200 or status>=300) then return false, value.message or "Authorization request rejected." end
+
+            return value
+
+        end
+
+        for _, send in ipairs(requests) do
+
+            local ok, response=pcall(send,{Url=url,Method="POST",Headers=headers,Body=body})
+
+            if ok then
+
+                local data,message=result(response)
+
+                if data==false then return nil,message end
+
+                if data then return data end
+
+            end
+
+        end
+
+        -- Standard Roblox server HTTP when this adapter is used in an authorized environment.
+
+        local ok,response=pcall(function() return HttpService:RequestAsync({Url=url,Method="POST",Headers=headers,Body=body}) end)
+
+        if ok then
+
+            local data,message=result(response)
+
+            if data==false then return nil,message end
+
+            if data then return data end
+
+        end
+
+        return nil,"Your environment does not support the HTTPS POST capabilities required by this loader, or the server is unavailable."
+
+    end
+
+    return adapter
+
+end
+
+
+
+-- Public links (Discord invite, Get key page) come from the server, so they can change without
+
+-- re-uploading scripts. The values below are only used when the server can't be reached.
+
+local function AtlasLinks()
+
+    local env = (typeof(getgenv) == "function" and getgenv()) or _G
+
+    if type(env.ATLAS_LINKS) == "table" then return env.ATLAS_LINKS end
+
+    local links = {discord = "https://discord.gg/HrqPxCpAUy", getkey = "https://getatlas.lol/getkey"}
+
+    local ok, body = pcall(function() return game:HttpGet("https://getatlas.lol/api/v1/links") end)
+
+    if ok and type(body) == "string" then
+
+        local decoded, data = pcall(function() return game:GetService("HttpService"):JSONDecode(body) end)
+
+        if decoded and type(data) == "table" then
+
+            for _, name in ipairs({"discord", "getkey"}) do
+
+                if type(data[name]) == "string" and data[name]:match("^https://") then links[name] = data[name] end
+
+            end
+
+        end
+
+    end
+
+    env.ATLAS_LINKS = links
+
+    return links
+
+end
+
+
+
+-- Shared authorization gate. Embedded in every adapter by tools/sync_access.py.
+
+-- Client code is editable; the server independently protects every source response.
+
+local function AtlasAuthorize(Library, adapter)
+
+    local env = (typeof(getgenv) == "function" and getgenv()) or _G
+
+    local HttpService = game:GetService("HttpService")
+
+    local endpoint = "https://getatlas.lol/api/v1/key/validate"
+
+    local protocol=AtlasProtocolCreate(type(getfenv)=="function" and getfenv() or _G, env, HttpService)
+
+    local placeId, gameId = tostring(game.PlaceId), tostring(game.GameId)
+
+    local hwid = ""
+
+    local identify = env.gethwid or (typeof(gethwid) == "function" and gethwid)
+
+    if typeof(identify) == "function" then
+
+        local ok, value = pcall(identify)
+
+        if ok and value then hwid = tostring(value) end
+
+    end
+
+    if hwid == "" then
+
+        local ok, value = pcall(function() return game:GetService("RbxAnalyticsService"):GetClientId() end)
+
+        if ok and value then hwid = tostring(value) end
+
+    end
+
+    local function verify(key)
+
+        if hwid == "" then return nil, "Couldn't identify this device." end
+
+        if tostring(game.PlaceId) ~= placeId or tostring(game.GameId) ~= gameId then
+
+            return nil, "The game changed. Run Atlas hub again."
+
+        end
+
+        local fields = {protocol_version=1,key=key, hwid=hwid, place_id=placeId, game_id=gameId, adapter=adapter}
+
+        local data,message=protocol.post(endpoint,fields)
+
+        if not data then return nil,message end
+
+        if data.valid ~= true or (data.type~="free" and data.type~="paid") or data.adapter ~= adapter
+
+            or tostring(data.game_id) ~= gameId or tostring(data.place_id) ~= placeId then
+
+            return nil, type(data.message)=="string" and data.message or "Access denied for this game."
+
+        end
+
+        return data, data.message
+
+    end
+
+    local accepted, acceptedKey
+
+    local function validate(key)
+
+        local data, message = verify(key)
+
+        if data then accepted=data;acceptedKey=key end
+
+        return data~=nil, message
+
+    end
+
+    -- A loader key is only an input hint, never evidence of authorization.
+
+    if type(env.ATLAS_ACCESS_KEY)=="string" then validate(env.ATLAS_ACCESS_KEY) end
+
+    if not accepted then
+
+        local unlocked = Library:KeySystem({Title="Atlas hub", Subtitle=adapter,
+
+            Logo="peak", Validate=validate, KeyLink=AtlasLinks().getkey,
+
+            Placeholder="Paste your Atlas hub key", KeyButton="Get key",
+
+            Note="Get your key on the website and paste it above"})
+
+        if not unlocked or not accepted then Library:Unload();return nil end
+
+    end
+
+    env.ATLAS_ACCESS_KEY=acceptedKey
+
+    accepted.key=acceptedKey;accepted.hwid=hwid
+
+    local running=true
+
+    Library:OnUnload(function() running=false end)
+
+    task.spawn(function()
+
+        while running do
+
+            task.wait(60)
+
+            if not running then break end
+
+            local data, message=verify(acceptedKey)
+
+            if not data or data.type~=accepted.type then
+
+                running=false
+
+                warn("[Atlas hub] "..tostring(message or "Access changed. Run the script again."))
+
+                env.ATLAS_ACCESS_KEY=nil
+
+                Library:Unload()
+
+                break
+
+            end
+
+        end
+
+    end)
+
+    return accepted
+
+end
+
+
+
+-- [BYPASS KEY SYSTEM AND AUTH GATE]
+local atlasAccess = {valid = true, type = "paid", session_token = "atlas_unlocked"}
+-- local atlasAccess=AtlasAuthorize(Library,"MurderMystery2")
+
+if not atlasAccess then return end
+
+local keyTier="paid" -- [UNLOCKED: PAID TIER FORCED]
+
+--// End Atlas access gate.
+
+
+
+--// Authorized MM2 initialization.
+
+local Round = require(RS.Modules.CurrentRoundClient)
+
+local Weapon = require(RS.ClientServices.WeaponService)
+
+local alive, navigating = true, false
+
+local connections, threads, visuals, originals, hooks = {}, {}, {}, {}, {}
+
+local Opt = {
+
+    aimbot=false, silent=false, aimHold=true, aimVisible=true, aimPart="Head",
+
+    aimFilter="Automatic", radius=180, smooth=6, prediction=0, drawFov=false,
+
+    autoGun=false, gunMethod="Walk",
+
+    autoCoins=false, autoFarm=false, farmMode="Coins", coinMethod="Walk",
+
+    autoKill=false, killMethod="Walk", attackInterval=0.65,
+
+    esp=false, espMurderer=true, espSheriff=true, espHero=true, espInnocent=true,
+
+    hideDead=true, maxDistance=1500, throughWalls=true, fill=0.8, outline=0,
+
+    highlight=true, boxes=false, tracers=false, skeleton=false, arrows=false,
+
+    names=true, role=true, distance=true, health=false, weapon=false, healthBar=false,
+
+    textSize=13, lineWidth=1, gunESP=false, espVisible=false, declutter=true,
+
+    speed=false, speedValue=24, jump=false, jumpValue=65, fov=false, fovValue=85, bright=false
+
+}
+
+local Stats={errors=0, status="Ready", target="--", silentReady=false, gun="Not found", visiblePlayers=0}
+
+local palette={Murderer=Color3.fromRGB(246,74,90), Sheriff=Color3.fromRGB(72,148,255),
+
+    Hero=Color3.fromRGB(255,206,90), Innocent=Color3.fromRGB(90,215,157), Dead=Color3.fromRGB(140,148,162),
+
+    Gun=Color3.fromRGB(94,174,255), Target=Color3.fromRGB(255,255,255)}
+
+local roleNames={Murderer="Murderer",Sheriff="Sheriff",Hero="Hero",Innocent="Innocent"}
+
+local target, targetPosition, navVersion = nil, nil, 0
+
+local bagCounts, coinRetry = {}, setmetatable({}, {__mode="k"})
+
+Stats.farm="Idle"; Stats.coinTarget="--"; Stats.killTarget="--"
+
+local manualGun=false
+
+local function connect(signal,fn) local c=signal:Connect(fn); table.insert(connections,c); return c end
+
+local function spawn(fn) local t=task.spawn(fn); table.insert(threads,t); return t end
+
+local function character()
+
+    local c=Player.Character
+
+    return c,c and c:FindFirstChildOfClass("Humanoid"),c and c:FindFirstChild("HumanoidRootPart")
+
+end
+
+local function living(p)
+
+    local d=Round.PlayerData[p.Name]
+
+    local h=p.Character and p.Character:FindFirstChildOfClass("Humanoid")
+
+    return d and not d.Dead and not d.Killed and h and h.Health>0
+
+end
+
+local function weaponTool(kind)
+
+    local char=Player.Character
+
+    for _,container in ipairs({char or Player,Player:FindFirstChild("Backpack") or Player}) do
+
+        for _,t in ipairs(container:GetChildren()) do
+
+            if t:IsA("Tool") then
+
+                if kind=="Gun" and (t:HasTag("Weapon_Gun") or t:FindFirstChild("IsGun") or t.Name=="Gun") then return t end
+
+                if kind=="Knife" and (t:HasTag("Weapon_Knife") or t.Name=="Knife") then return t end
+
+            end
+
+        end
+
+    end
+
+end
+
+local function heldWeapon()
+
+    local c=Player.Character
+
+    if not c then return false end
+
+    local gun,knife=weaponTool("Gun"),weaponTool("Knife")
+
+    return (gun and gun.Parent==c) or (knife and knife.Parent==c)
+
+end
+
+local function saveSet(object,key,value)
+
+    if not object then return end
+
+    originals[object]=originals[object] or {}
+
+    if originals[object][key]==nil then originals[object][key]=object[key] end
+
+    object[key]=value
+
+end
+
+local function restore(object,key)
+
+    local saved=originals[object]
+
+    if saved and saved[key]~=nil then pcall(function() object[key]=saved[key] end); saved[key]=nil end
+
+end
+
+local function cancelWalk()
+
+    navVersion+=1
+
+    local _,h,root=character()
+
+    if h and root then h:MoveTo(root.Position) end
+
+end
+
+local function destroyVisual(object)
+
+    local d=visuals[object]
+
+    if d then d.holder:Destroy(); d.highlight:Destroy(); visuals[object]=nil end
+
+end
+
+local function stop()
+
+    if not alive then return end
+
+    RunService:UnbindFromRenderStep("ATLAS_MM2_Aim")
+
+    alive=false; Opt.autoGun=false; Opt.autoCoins=false; Opt.autoFarm=false; Opt.autoKill=false; manualGun=false; cancelWalk()
+
+    for _,c in ipairs(connections) do c:Disconnect() end
+
+    for _,t in ipairs(threads) do pcall(task.cancel,t) end
+
+    for fn,record in pairs(hooks) do
+
+        if record.mode=="hook" then pcall(restorefunction,record.fn)
+
+        elseif Weapon[record.key]==record.replacement then Weapon[record.key]=record.original end
+
+    end
+
+    local objects={} for object in pairs(visuals) do table.insert(objects,object) end
+
+    for _,object in ipairs(objects) do destroyVisual(object) end
+
+    for object,saved in pairs(originals) do for key,value in pairs(saved) do pcall(function() object[key]=value end) end end
+
+    local _,h=character()
+
+    if h and workspace.CurrentCamera then workspace.CurrentCamera.CameraSubject=h end
+
+    if ENV.ATLAS_MM2 and ENV.ATLAS_MM2.Options==Opt then ENV.ATLAS_MM2=nil end
+
+end
+
+Library:OnUnload(stop)
+
+local Window=Library:CreateWindow({Title="Atlas hub",Subtitle="Murder Mystery 2",Logo="peak"})
+
+Library.ScreenGui.Parent=Player.PlayerGui
+
+-- Prevent Roblox automatic translation from changing this English interface.
+
+local function keepEnglish(object)
+
+    if object:IsA("GuiBase2d") then object.AutoLocalize=false end
+
+end
+
+keepEnglish(Library.ScreenGui)
+
+for _,object in ipairs(Library.ScreenGui:GetDescendants()) do keepEnglish(object) end
+
+connect(Library.ScreenGui.DescendantAdded,keepEnglish)
+
+local Main=Window:Tab({Name="Main",Icon="crosshair"})
+
+local Farm=Window:Tab({Name="Farm",Icon="coins"})
+
+local ESP=Window:Tab({Name="ESP",Icon="eye"})
+
+local Movement=Window:Tab({Name="Player",Icon="user-round"})
+
+local Config=Window:Tab({Name="Config",Icon="settings"})
+
+local overlay=Instance.new("Frame")
+
+overlay.Name="MM2_Overlay"; overlay.BackgroundTransparency=1; overlay.Size=UDim2.fromScale(1,1)
+
+overlay.Active=false; overlay.Parent=Library.ScreenGui; overlay.ZIndex=0
+
+local function frame(parent,name,color)
+
+    local f=Instance.new("Frame"); f.Name=name; f.BorderSizePixel=0; f.BackgroundColor3=color or Color3.new(1,1,1)
+
+    f.Visible=false; f.Active=false; f.ZIndex=2; f.Parent=parent; return f
+
+end
+
+local circle=frame(overlay,"AimFOV")
+
+circle.BackgroundTransparency=1; circle.AnchorPoint=Vector2.new(0.5,0.5)
+
+local corner=Instance.new("UICorner"); corner.CornerRadius=UDim.new(1,0); corner.Parent=circle
+
+local circleStroke=Instance.new("UIStroke"); circleStroke.Color=Color3.fromRGB(195,208,231); circleStroke.Thickness=1; circleStroke.Parent=circle
+
+local touchPointer
+
+connect(UIS.TouchStarted,function(input,processed)
+
+    if not processed and input.Position.X > Library.ScreenGui.AbsoluteSize.X * 0.4 then
+
+        touchPointer=Vector2.new(input.Position.X,input.Position.Y)
+
+    end
+
+end)
+
+connect(UIS.TouchMoved,function(input,processed)
+
+    if not processed and input.Position.X > Library.ScreenGui.AbsoluteSize.X * 0.4 then
+
+        touchPointer=Vector2.new(input.Position.X,input.Position.Y)
+
+    end
+
+end)
+
+local function cursor()
+
+    if UIS.MouseEnabled then return UIS:GetMouseLocation() end
+
+    local camera=workspace.CurrentCamera
+
+    return touchPointer or (camera and camera.ViewportSize/2 or Vector2.zero)
+
+end
+
+local function allowedTarget(p,d)
+
+    if not d or not living(p) then return false end
+
+    if Opt.aimFilter=="Murderer" then return d.Role=="Murderer" end
+
+    if Opt.aimFilter=="Sheriff / Hero" then return d.Role=="Sheriff" or d.Role=="Hero" end
+
+    if Opt.aimFilter=="All alive" then return true end
+
+    local mine=Round.PlayerData[Player.Name]
+
+    if mine and mine.Role=="Murderer" then return d.Role~="Murderer" end
+
+    return d.Role=="Murderer"
+
+end
+
+local function clearSight(position,char)
+
+    local camera=workspace.CurrentCamera
+
+    if not camera then return false end
+
+    local params=RaycastParams.new(); params.FilterType=Enum.RaycastFilterType.Exclude
+
+    local ignore={Player.Character, char}
+
+    for _,v in ipairs(CS:GetTagged("WeaponPassthrough")) do table.insert(ignore,v) end
+
+    params.FilterDescendantsInstances=ignore
+
+    local hit=workspace:Raycast(camera.CFrame.Position,position-camera.CFrame.Position,params)
+
+    return hit==nil or (hit.Instance and hit.Instance.Transparency>=0.95)
+
+end
+
+local function chooseTarget()
+
+    local camera=workspace.CurrentCamera
+
+    if not camera or not living(Player) then return nil,nil end
+
+    local mouse=cursor(); local best,bestPoint,bestDistance=nil,nil,Opt.radius
+
+    for _,p in ipairs(Players:GetPlayers()) do
+
+        if p~=Player and allowedTarget(p,Round.PlayerData[p.Name]) then
+
+            local c=p.Character
+
+            local part=c and (c:FindFirstChild(Opt.aimPart) or c:FindFirstChild("HumanoidRootPart"))
+
+            if part and part:IsA("BasePart") then
+
+                local velocity=part.AssemblyLinearVelocity
+
+                local point=part.Position+Vector3.new(velocity.X,0,velocity.Z)*Opt.prediction
+
+                local screen,onScreen=camera:WorldToViewportPoint(point)
+
+                local distance=(Vector2.new(screen.X,screen.Y)-mouse).Magnitude
+
+                if onScreen and screen.Z>0 and distance<bestDistance and (not Opt.aimVisible or clearSight(point,c)) then
+
+                    best,bestPoint,bestDistance=p,point,distance
+
+                end
+
+            end
+
+        end
+
+    end
+
+    return best,bestPoint
+
+end
+
+local function silentCFrame()
+
+    if not alive or not Opt.silent or not living(Player) or not heldWeapon() then return nil end
+
+    -- Resolve at the moment of the shot rather than using the render cache.
+
+    local p, point=chooseTarget()
+
+    if p and point then target,targetPosition=p,point; return CFrame.new(point) end
+
+end
+
+local function ensureSilent()
+
+    local count=0
+
+    for _,key in ipairs({"GetMouseTargetCFrame","GetTargetPosition"}) do
+
+        local record=hooks[key]
+
+        if record and (record.mode=="hook" and Weapon[key]==record.fn or Weapon[key]==record.replacement) then
+
+            count+=1
+
+        elseif type(Weapon[key])=="function" then
+
+            local fn=Weapon[key]
+
+            local original=fn
+
+            local replacement=function(...)
+
+                Stats.silentCalls=(Stats.silentCalls or 0)+1
+
+                local aim=silentCFrame()
+
+                if aim then Stats.silentRedirects=(Stats.silentRedirects or 0)+1;return aim end
+
+                return original(...)
+
+            end
+
+            local installed=false
+
+            -- Hook the closure itself so cached references inside weapon clients are covered.
+
+            if type(hookfunction)=="function" and type(restorefunction)=="function" then
+
+                local ok,copy=pcall(hookfunction,fn,replacement)
+
+                if ok and type(copy)=="function" then
+
+                    original=copy
+
+                    hooks[key]={mode="hook",fn=fn,key=key,original=copy,replacement=replacement}
+
+                    installed=true
+
+                end
+
+            end
+
+            if not installed then
+
+                Weapon[key]=replacement
+
+                hooks[key]={mode="table",key=key,original=fn,replacement=replacement}
+
+            end
+
+            count+=1
+
+        end
+
+    end
+
+    Stats.silentReady=count==2
+
+    return Stats.silentReady
+
+end
+
+local aim=Main:Section({Name="Aimbot",Icon="crosshair",Side="Left"})
+
+aim:Toggle({Flag="mm2_aimbot",Name="Enable aimbot",Icon="crosshair",Default=false,Callback=function(v) Opt.aimbot=v end})
+
+local mobileAim = UIS.TouchEnabled and not UIS.MouseEnabled
+
+local function touchAim()
+
+    return UIS.TouchEnabled and (not UIS.MouseEnabled or UIS:GetLastInputType() == Enum.UserInputType.Touch)
+
+end
+
+aim:Toggle({Flag="mm2_aim_hold",Name=mobileAim and "Only with weapon equipped" or "Hold right mouse",Icon=mobileAim and "crosshair" or "mouse",Default=true,Callback=function(v) Opt.aimHold=v end})
+
+aim:Dropdown({Flag="mm2_aim_filter",Name="Target filter",Icon="list-filter",Options={"Automatic","Murderer","Sheriff / Hero","All alive"},Default="Automatic",
+
+    Callback=function(v) Opt.aimFilter=v or "Automatic" end})
+
+aim:Dropdown({Flag="mm2_aim_part",Name="Aim part",Icon="person-standing",Options={"Head","Torso"},Default="Head",
+
+    Callback=function(v) Opt.aimPart=v=="Torso" and "HumanoidRootPart" or "Head" end})
+
+aim:Slider({Flag="mm2_aim_radius",Name="Aim radius",Min=30,Max=600,Default=180,Increment=5,Suffix=" px",Callback=function(v) Opt.radius=v end})
+
+aim:Slider({Flag="mm2_aim_smooth",Name="Smooth",Min=3,Max=30,Default=6,Increment=1,Tooltip="Lower values aim faster. Minimum: 3.",Callback=function(v) Opt.smooth=math.max(3,v) end})
+
+local silent=Main:Section({Name="Silent aim",Icon="target",Side="Right"})
+
+silent:Toggle({Flag="mm2_silent",Name="Enable silent aim",Icon="focus",Default=false,Callback=function(v)
+
+    Opt.silent=v and ensureSilent() or false
+
+end})
+
+silent:Toggle({Flag="mm2_wall_check",Name="Wall check",Icon="brick-wall",Default=true,Callback=function(v) Opt.aimVisible=v end})
+
+silent:Toggle({Flag="mm2_aim_circle",Name="Show FOV circle",Icon="circle-dashed",Default=false,Callback=function(v) Opt.drawFov=v end})
+
+silent:Slider({Flag="mm2_prediction",Name="Movement prediction",Min=0,Max=0.3,Default=0,Increment=0.01,Suffix=" s",
+
+    Callback=function(v) Opt.prediction=v end})
+
+local gun=Main:Section({Name="Gun pickup",Icon="hand-grab",Side="Right"})
+
+local gunToggle=gun:Toggle({Flag="mm2_auto_gun",Name="Auto pick up gun",Icon="hand-grab",Default=false,Callback=function(v) Opt.autoGun=v; if not v then cancelWalk() end end})
+
+gun:Dropdown({Flag="mm2_pickup_method",Name="Pickup method",Icon="route",Options={"Walk","Teleport"},Default="Walk",Callback=function(v)
+
+    Opt.gunMethod=v or "Walk"; cancelWalk()
+
+end})
+
+gun:Button({Name="Pick up gun now",Icon="hand",Callback=function() manualGun=true end})
+
+local function toggle(section,name,key,default,icon)
+
+    return section:Toggle({Name=name,Icon=icon,Flag="mm2_"..key,Default=default or false,
+
+        Callback=function(v) Opt[key]=v end})
+
+end
+
+local function slider(section,name,key,min,max,default,step)
+
+    return section:Slider({Name=name,Flag="mm2_"..key,Min=min,Max=max,Default=default,
+
+        Increment=step or 1,Callback=function(v) Opt[key]=v end})
+
+end
+
+-- Paid section overlay: same interaction and presentation as Loot Forge.
+
+local function lockSection(section, info)
+
+	local container = section.Container
+
+	if not container or not container.Parent then
+
+		return
+
+	end
+
+	local T = Library:GetTheme()
+
+	local TweenService = game:GetService("TweenService")
+
+	local WHITE = Color3.new(1, 1, 1)
+
+	local function new(class, props, children)
+
+		local inst = Instance.new(class)
+
+		for k, v in pairs(props) do
+
+			inst[k] = v
+
+		end
+
+		for _, c in ipairs(children or {}) do
+
+			c.Parent = inst
+
+		end
+
+		return inst
+
+	end
+
+	local function corner(r)
+
+		return new("UICorner", { CornerRadius = UDim.new(0, r) })
+
+	end
+
+	local function fontOf(weight)
+
+		return Font.new("rbxasset://fonts/families/BuilderSans.json", weight, Enum.FontStyle.Normal)
+
+	end
+
+
+
+	-- the controls move into a holder that also carries the glass, so the glass always
+
+	-- matches their size (folding the section included)
+
+	local holder = new("Frame", {
+
+		Name = "PaidHolder",
+
+		Size = UDim2.new(1, 0, 0, 0),
+
+		BackgroundTransparency = 1,
+
+		LayoutOrder = container.LayoutOrder,
+
+		Parent = container.Parent,
+
+	})
+
+	container.Parent = holder
+
+	-- The holder's height follows the controls. (AutomaticSize would also count the glass,
+
+	-- which is sized from the holder itself, and the height would keep doubling.) Absolute
+
+	-- sizes include the window's UIScale, so convert back to layout pixels.
+
+	local function uiScale(inst)
+
+		local s = 1
+
+		local p = inst
+
+		while p do
+
+			local u = p:FindFirstChildOfClass("UIScale")
+
+			if u then
+
+				s *= u.Scale
+
+			end
+
+			p = p.Parent
+
+		end
+
+		return s
+
+	end
+
+	local function syncHeight()
+
+		local s = uiScale(holder)
+
+		holder.Size = UDim2.new(1, 0, 0, math.floor(container.AbsoluteSize.Y / (s > 0 and s or 1) + 0.5))
+
+	end
+
+	container:GetPropertyChangedSignal("AbsoluteSize"):Connect(syncHeight)
+
+	syncHeight()
+
+
+
+	local glass = new("Frame", {
+
+		Name = "PaidGlass",
+
+		Size = UDim2.fromScale(1, 1),
+
+		BackgroundColor3 = T.Surface,
+
+		BackgroundTransparency = 0.08,
+
+		ClipsDescendants = true,
+
+		Active = true, -- the locked controls can't be clicked
+
+		ZIndex = 20,
+
+		Parent = holder,
+
+	}, { corner(7) })
+
+
+
+	-- blurred ghost of the controls: faint, and faded out in the middle so the message
+
+	-- sits on clean glass
+
+	for _, o in ipairs({ Vector2.new(-2, -1), Vector2.new(2, 1), Vector2.new(-1, 2), Vector2.new(1, -2) }) do
+
+		local group = new("CanvasGroup", {
+
+			Position = UDim2.fromOffset(o.X, o.Y),
+
+			Size = UDim2.fromScale(1, 1),
+
+			BackgroundTransparency = 1,
+
+			GroupTransparency = 0.9,
+
+			ZIndex = 21,
+
+			Parent = glass,
+
+		}, {
+
+			new("UIGradient", {
+
+				Rotation = 90,
+
+				Transparency = NumberSequence.new({
+
+					NumberSequenceKeypoint.new(0, 0),
+
+					NumberSequenceKeypoint.new(0.28, 0.7),
+
+					NumberSequenceKeypoint.new(0.5, 1),
+
+					NumberSequenceKeypoint.new(0.72, 0.7),
+
+					NumberSequenceKeypoint.new(1, 0),
+
+				}),
+
+			}),
+
+		})
+
+		local ghost = container:Clone()
+
+		ghost.Position = UDim2.new()
+
+		ghost.Parent = group
+
+	end
+
+
+
+	-- frost tint + light from the top-left
+
+	new("Frame", {
+
+		Size = UDim2.fromScale(1, 1),
+
+		BackgroundColor3 = WHITE,
+
+		BackgroundTransparency = 0,
+
+		ZIndex = 22,
+
+		Parent = glass,
+
+	}, {
+
+		corner(7),
+
+		new("UIGradient", {
+
+			Rotation = 35,
+
+			Transparency = NumberSequence.new({
+
+				NumberSequenceKeypoint.new(0, 0.9),
+
+				NumberSequenceKeypoint.new(0.45, 0.97),
+
+				NumberSequenceKeypoint.new(1, 0.985),
+
+			}),
+
+		}),
+
+		new("UIStroke", { Color = WHITE, Thickness = 1, Transparency = 0.88, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }),
+
+	})
+
+	-- thin highlight along the top edge
+
+	new("Frame", {
+
+		Position = UDim2.fromOffset(12, 1),
+
+		Size = UDim2.new(1, -24, 0, 1),
+
+		BackgroundColor3 = WHITE,
+
+		BorderSizePixel = 0,
+
+		ZIndex = 23,
+
+		Parent = glass,
+
+	}, {
+
+		new("UIGradient", {
+
+			Transparency = NumberSequence.new({
+
+				NumberSequenceKeypoint.new(0, 1),
+
+				NumberSequenceKeypoint.new(0.5, 0.55),
+
+				NumberSequenceKeypoint.new(1, 1),
+
+			}),
+
+		}),
+
+	})
+
+
+
+	-- light sweep that crosses the glass now and then
+
+	local sweep = new("Frame", {
+
+		Size = UDim2.fromScale(1, 1),
+
+		BackgroundColor3 = WHITE,
+
+		ZIndex = 24,
+
+		Parent = glass,
+
+	})
+
+	local band = new("UIGradient", {
+
+		Rotation = 20,
+
+		Offset = Vector2.new(-1, 0),
+
+		Transparency = NumberSequence.new({
+
+			NumberSequenceKeypoint.new(0, 1),
+
+			NumberSequenceKeypoint.new(0.42, 1),
+
+			NumberSequenceKeypoint.new(0.5, 0.9),
+
+			NumberSequenceKeypoint.new(0.58, 1),
+
+			NumberSequenceKeypoint.new(1, 1),
+
+		}),
+
+		Parent = sweep,
+
+	})
+
+	task.spawn(function()
+
+		while alive and sweep.Parent do
+
+			band.Offset = Vector2.new(-1, 0)
+
+			TweenService:Create(band, TweenInfo.new(1.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { Offset = Vector2.new(1, 0) }):Play()
+
+			task.wait(4.5)
+
+		end
+
+	end)
+
+
+
+	-- centred message
+
+	local stack = new("Frame", {
+
+		AnchorPoint = Vector2.new(0.5, 0.5),
+
+		Position = UDim2.fromScale(0.5, 0.5),
+
+		Size = UDim2.new(1, -24, 0, 0),
+
+		AutomaticSize = Enum.AutomaticSize.Y,
+
+		BackgroundTransparency = 1,
+
+		ZIndex = 25,
+
+		Parent = glass,
+
+	}, {
+
+		new("UIListLayout", { HorizontalAlignment = Enum.HorizontalAlignment.Center, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }),
+
+	})
+
+	local chip = new("Frame", {
+
+		Size = UDim2.fromOffset(32, 32),
+
+		BackgroundColor3 = WHITE,
+
+		BackgroundTransparency = 0.92,
+
+		LayoutOrder = 1,
+
+		ZIndex = 25,
+
+		Parent = stack,
+
+	}, { corner(16), new("UIStroke", { Color = WHITE, Thickness = 1, Transparency = 0.8, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }) })
+
+	local chipScale = new("UIScale", { Parent = chip })
+
+	new("ImageLabel", {
+
+		AnchorPoint = Vector2.new(0.5, 0.5),
+
+		Position = UDim2.fromScale(0.5, 0.5),
+
+		Size = UDim2.fromOffset(15, 15),
+
+		BackgroundTransparency = 1,
+
+		Image = "rbxassetid://71897067930472", -- Lucide "lock" (Nebula Icon Library)
+
+		ImageColor3 = WHITE,
+
+		ZIndex = 26,
+
+		Parent = chip,
+
+	})
+
+	new("TextLabel", {
+
+		Size = UDim2.new(1, 0, 0, 18),
+
+		BackgroundTransparency = 1,
+
+		Text = info.Title or "Paid feature",
+
+		FontFace = fontOf(Enum.FontWeight.ExtraBold),
+
+		TextSize = 15,
+
+		TextColor3 = WHITE,
+
+		LayoutOrder = 2,
+
+		ZIndex = 25,
+
+		Parent = stack,
+
+	})
+
+	new("TextLabel", {
+
+		Size = UDim2.new(1, 0, 0, 16),
+
+		BackgroundTransparency = 1,
+
+		Text = info.Message or "Unlock it with a paid key",
+
+		FontFace = fontOf(Enum.FontWeight.SemiBold),
+
+		TextSize = 13,
+
+		TextColor3 = T.Muted,
+
+		LayoutOrder = 3,
+
+		ZIndex = 25,
+
+		Parent = stack,
+
+	})
+
+	new("Frame", { Size = UDim2.new(1, 0, 0, 2), BackgroundTransparency = 1, LayoutOrder = 4, Parent = stack }) -- spacing
+
+	-- small pill button (text in a child label, so the theme's accent gradient never tints it)
+
+	local button = new("TextButton", {
+
+		Size = UDim2.fromOffset(112, 30),
+
+		BackgroundColor3 = T.Accent,
+
+		AutoButtonColor = false,
+
+		Text = "",
+
+		LayoutOrder = 5,
+
+		ZIndex = 25,
+
+		Parent = stack,
+
+	}, { corner(15) })
+
+	local buttonText = new("TextLabel", {
+
+		Size = UDim2.fromScale(1, 1),
+
+		BackgroundTransparency = 1,
+
+		Text = info.Button or "Unlock",
+
+		FontFace = fontOf(Enum.FontWeight.Bold),
+
+		TextSize = 14,
+
+		TextColor3 = WHITE,
+
+		ZIndex = 26,
+
+		Parent = button,
+
+	})
+
+	buttonText:SetAttribute("NoTheme", true)
+
+	local press = new("UIScale", { Parent = button })
+
+	button.MouseEnter:Connect(function()
+
+		TweenService:Create(button, TweenInfo.new(0.15), { BackgroundColor3 = T.AccentHover }):Play()
+
+		TweenService:Create(chipScale, TweenInfo.new(0.35, Enum.EasingStyle.Back), { Scale = 1.08 }):Play()
+
+	end)
+
+	button.MouseLeave:Connect(function()
+
+		TweenService:Create(button, TweenInfo.new(0.2), { BackgroundColor3 = T.Accent }):Play()
+
+		TweenService:Create(chipScale, TweenInfo.new(0.3), { Scale = 1 }):Play()
+
+		press.Scale = 1
+
+	end)
+
+	button.MouseButton1Down:Connect(function()
+
+		TweenService:Create(press, TweenInfo.new(0.08), { Scale = 0.95 }):Play()
+
+	end)
+
+	button.MouseButton1Up:Connect(function()
+
+		TweenService:Create(press, TweenInfo.new(0.3, Enum.EasingStyle.Back), { Scale = 1 }):Play()
+
+	end)
+
+	button.Activated:Connect(function()
+
+		local copy = (typeof(setclipboard) == "function" and setclipboard) or (typeof(toclipboard) == "function" and toclipboard)
+
+		if copy and pcall(copy, info.Link) then
+
+			buttonText.Text = "Link copied"
+
+			Library:Notify({ Title = "Discord invite copied", Content = "Ask the staff for a paid key.", Type = "success", Duration = 3 })
+
+			task.delay(1.8, function()
+
+				if buttonText.Parent then
+
+					buttonText.Text = info.Button or "Unlock"
+
+				end
+
+			end)
+
+		else
+
+			Library:Notify({ Title = "Our Discord", Content = tostring(info.Link), Type = "info", Duration = 5 })
+
+		end
+
+	end)
+
+end
+
+
+
+
+
+local farming=Farm:Section({Name="Coin farming",Icon="coins",Side="Left"})
+
+local coinToggle=farming:Toggle({Name="Auto collect coins",Flag="mm2_auto_coins",Default=false,Callback=function(v)
+
+    Opt.autoCoins=v -- [UNLOCKED];cancelWalk()
+
+end})
+
+local farmToggle=farming:Toggle({Name="Auto farm rounds",Flag="mm2_auto_farm",Default=false,Callback=function(v)
+
+    Opt.autoFarm=v -- [UNLOCKED];cancelWalk()
+
+end})
+
+farming:Dropdown({Name="Farm mode",Flag="mm2_farm_mode",Options={"Coins","Coins + Murderer"},Default="Coins",Callback=function(v)
+
+    Opt.farmMode=v or "Coins";cancelWalk()
+
+end})
+
+farming:Dropdown({Name="Coin movement",Flag="mm2_coin_method",Options={"Walk","Teleport"},Default="Walk",Callback=function(v)
+
+    Opt.coinMethod=v or "Walk";cancelWalk()
+
+end})
+
+local combat=Farm:Section({Name="Murderer automation",Icon="swords",Side="Right"})
+
+local killToggle=combat:Toggle({Name="Auto kill all as Murderer",Flag="mm2_auto_kill",Default=false,Callback=function(v)
+
+    Opt.autoKill=v -- [UNLOCKED];cancelWalk()
+
+end})
+
+combat:Dropdown({Name="Chase method",Flag="mm2_kill_method",Options={"Walk","Teleport"},Default="Walk",Callback=function(v)
+
+    Opt.killMethod=v or "Walk";cancelWalk()
+
+end})
+
+combat:Slider({Name="Attack interval",Flag="mm2_attack_interval",Min=0.3,Max=2,Default=0.65,Increment=0.05,Suffix=" s",Callback=function(v)
+
+    Opt.attackInterval=math.clamp(v,0.3,2)
+
+end})
+
+
+
+-- Block the entire Farm tab for free keys, including config-restored toggles.
+
+if keyTier ~= "paid" then
+
+    local info={Title="Paid feature",Message="Unlock it with a paid key",Button="Unlock",Link = AtlasLinks().discord}
+
+    -- task.defer(lockSection,farming,info) [UNLOCKED]
+
+    -- task.defer(lockSection,combat,info) [UNLOCKED]
+
+end
+
+
+
+local filters=ESP:Section({Name="Visibility",Icon="scan-eye",Side="Left"})
+
+toggle(filters,"Enable ESP","esp",false)
+
+toggle(filters,"Murderer","espMurderer",true)
+
+toggle(filters,"Sheriff","espSheriff",true)
+
+toggle(filters,"Hero","espHero",true)
+
+toggle(filters,"Innocents","espInnocent",true)
+
+toggle(filters,"Hide dead / lobby","hideDead",true)
+
+toggle(filters,"Visible only","espVisible",false)
+
+slider(filters,"Maximum distance","maxDistance",50,3000,1500,50)
+
+local styles=ESP:Section({Name="Visuals",Icon="scan",Side="Right"})
+
+toggle(styles,"Highlight","highlight",true)
+
+toggle(styles,"2D boxes","boxes",false)
+
+toggle(styles,"Tracers","tracers",false)
+
+toggle(styles,"Skeleton","skeleton",false)
+
+toggle(styles,"Offscreen arrows","arrows",false)
+
+toggle(styles,"Health bar","healthBar",false)
+
+slider(styles,"Line thickness","lineWidth",1,4,1,1)
+
+local highlight=ESP:Section({Name="Highlight settings",Icon="highlighter",Side="Right"})
+
+toggle(highlight,"Through walls","throughWalls",true)
+
+slider(highlight,"Fill transparency","fill",0,1,0.8,0.05)
+
+slider(highlight,"Outline transparency","outline",0,1,0,0.05)
+
+local labels=ESP:Section({Name="Player details",Icon="contact-round",Side="Left"})
+
+toggle(labels,"Name","names",true); toggle(labels,"Role","role",true)
+
+toggle(labels,"Distance","distance",true); toggle(labels,"Health","health",false)
+
+toggle(labels,"Equipped weapon","weapon",false)
+
+toggle(labels,"Avoid overlapping labels","declutter",true)
+
+slider(labels,"Text size","textSize",10,20,13,1)
+
+local colorSection=ESP:Section({Name="Role colors",Icon="swatch-book",Side="Right"})
+
+for _,entry in ipairs({{"Murderer","Murderer"},{"Sheriff","Sheriff"},{"Hero","Hero"},{"Innocent","Innocent"},{"Dead / lobby","Dead"},{"Dropped gun","Gun"},{"Aim target","Target"}}) do
+
+    local key=entry[2]
+
+    colorSection:ColorPicker({Name=entry[1],Flag="esp_color_"..key,Default=palette[key],Callback=function(v) palette[key]=v end})
+
+end
+
+local objectSection=ESP:Section({Name="Objects",Icon="radar",Side="Left"})
+
+toggle(objectSection,"Dropped gun ESP","gunESP",false)
+
+local move=Movement:Section({Name="Movement",Icon="footprints",Side="Left"})
+
+local speedToggle=toggle(move,"Custom speed","speed",false,"gauge")
+
+slider(speedToggle:SubOptions(),"Walk speed","speedValue",16,60,24,1)
+
+local jumpToggle=toggle(move,"Custom jump","jump",false,"arrow-up")
+
+slider(jumpToggle:SubOptions(),"Jump power","jumpValue",40,100,65,1)
+
+local view=Movement:Section({Name="Camera & lighting",Icon="aperture",Side="Right"})
+
+local fovToggle=toggle(view,"Custom FOV","fov",false,"view")
+
+slider(fovToggle:SubOptions(),"Field of view","fovValue",60,110,85,1)
+
+toggle(view,"Fullbright","bright",false,"sun")
+
+-- Supply catalog icons for every shared Config control without changing NOIR globally.
+
+local configIcons={
+
+    ["Menu key"]="keyboard",
+
+    ["Scale"]="move",
+
+    ["Notifications"]="bell-ring",
+
+    ["Keybind list"]="keyboard",
+
+    ["Watermark"]="badge",
+
+    ["Re-execute on teleport"]="repeat-2",
+
+    ["Close hub"]="power",
+
+    ["Config name"]="save",
+
+    ["Saved configs"]="folder-open",
+
+    ["Autoload"]="folder-check",
+
+    ["Save"]="save",
+
+    ["Load"]="download",
+
+    ["Delete"]="trash-2",
+
+    ["Set as autoload"]="folder-check",
+
+    ["Refresh list"]="list-restart",
+
+    ["Preset"]="palette",
+
+    ["Gradient start"]="paintbrush",
+
+    ["Gradient end"]="palette",
+
+    ["Swap colours"]="arrow-left-right",
+
+    ["Gradient style"]="blend",
+
+    ["Gradient angle"]="move",
+
+    ["Gradient speed"]="gauge",
+
+    ["Background tint"]="moon",
+
+    ["Roundness"]="box",
+
+    ["Font"]="type",
+
+    ["Reset theme"]="refresh-cw",
+
+    ["Players"]="users-round",
+
+    ["Server uptime"]="clock",
+
+    ["Rejoin"]="log-in",
+
+    ["Server hop"]="shuffle",
+
+    ["Smallest server"]="user-round-minus",
+
+    ["Copy JobId"]="copy",
+
+    ["Copy join script"]="clipboard-copy",
+
+    ["Unlock FPS"]="gauge",
+
+    ["FPS cap"]="gauge",
+
+    ["Low graphics"]="monitor-down",
+
+    ["Anti-AFK"]="alarm-clock-check",
+
+    ["Executor"]="terminal",
+
+    ["File system unavailable"]="triangle-alert"
+
+}
+
+local ConfigWithIcons=setmetatable({
+
+    Section=function(_,options)
+
+        local section=Config:Section(options)
+
+        local proxy={}
+
+        for _,method in ipairs({"Toggle","Slider","Dropdown","Button","ColorPicker","Keybind","Input","Label","Segmented"}) do
+
+            local elementMethod=method
+
+            proxy[elementMethod]=function(_,control)
+
+                if elementMethod=="Slider" then control.Icon=nil
+
+                else control.Icon=configIcons[control.Name] or control.Icon or "settings" end
+
+                return section[elementMethod](section,control)
+
+            end
+
+        end
+
+        return setmetatable(proxy,{__index=function(_,key)
+
+            local value=section[key]
+
+            if type(value)=="function" then return function(_,...) return value(section,...) end end
+
+            return value
+
+        end})
+
+    end
+
+},{__index=Config})
+
+Library:AddConfigSections(ConfigWithIcons, {
+
+    Scope="MM2",
+
+    Reexecute='loadstring(readfile("MurderMystery2.lua"))()',
+
+})
+
+local skeletonPairs={{"Head","UpperTorso"},{"UpperTorso","LowerTorso"},
+
+    {"UpperTorso","LeftUpperArm"},{"LeftUpperArm","LeftLowerArm"},{"LeftLowerArm","LeftHand"},
+
+    {"UpperTorso","RightUpperArm"},{"RightUpperArm","RightLowerArm"},{"RightLowerArm","RightHand"},
+
+    {"LowerTorso","LeftUpperLeg"},{"LeftUpperLeg","LeftLowerLeg"},{"LeftLowerLeg","LeftFoot"},
+
+    {"LowerTorso","RightUpperLeg"},{"RightUpperLeg","RightLowerLeg"},{"RightLowerLeg","RightFoot"},
+
+    {"Head","Torso"},{"Torso","Left Arm"},{"Torso","Right Arm"},{"Torso","Left Leg"},{"Torso","Right Leg"}}
+
+local function line(f,a,b,color,thickness)
+
+    local delta=b-a
+
+    f.AnchorPoint=Vector2.new(0.5,0.5); f.Position=UDim2.fromOffset((a.X+b.X)/2,(a.Y+b.Y)/2)
+
+    f.Size=UDim2.fromOffset(delta.Magnitude,thickness); f.Rotation=math.deg(math.atan2(delta.Y,delta.X))
+
+    f.BackgroundColor3=color; f.Visible=true
+
+end
+
+local function getVisual(object)
+
+    local d=visuals[object]; if d then return d end
+
+    d={lines={},bones={}}
+
+    local head=object:FindFirstChild("Head")
+
+    local root=object:FindFirstChild("HumanoidRootPart")
+
+    d.tagHeight=head and root and math.clamp(head.Position.Y-root.Position.Y+head.Size.Y/2+0.15,1.5,5) or 3.2
+
+    d.holder=frame(overlay,"ESP_Entry"); d.holder.BackgroundTransparency=1
+
+    d.holder.Size=UDim2.fromScale(1,1); d.holder.Visible=true
+
+    d.highlight=Instance.new("Highlight"); d.highlight.Name="MM2_Highlight"; d.highlight.Adornee=object
+
+    d.highlight.Parent=Library.ScreenGui; d.highlight.Enabled=false
+
+    for i=1,4 do d.lines[i]=frame(d.holder,"Box"..i) end
+
+    d.tracer=frame(d.holder,"Tracer"); d.healthBG=frame(d.holder,"HealthBackground",Color3.fromRGB(16,20,28))
+
+    d.healthFill=frame(d.healthBG,"Health",Color3.fromRGB(90,215,157))
+
+    d.tag=frame(d.holder,"PlayerInfo",Color3.fromRGB(8,10,15))
+
+    d.tag.BackgroundTransparency=0.18;d.tag.AnchorPoint=Vector2.new(0.5,1);d.tag.ZIndex=3
+
+    d.tag.ClipsDescendants=true
+
+    d.tagTint=Instance.new("UIGradient");d.tagTint.Rotation=0;d.tagTint.Parent=d.tag
+
+    d.tagAccent=frame(d.tag,"ThemeAccent",Color3.fromRGB(0,82,255))
+
+    d.tagAccent.Size=UDim2.fromOffset(2,8);d.tagAccent.AnchorPoint=Vector2.new(0,0.5)
+
+    d.tagAccent.Position=UDim2.new(0,5,0.5,0);d.tagAccent.ZIndex=4
+
+    local corner=Instance.new("UICorner");corner.CornerRadius=UDim.new(0.5,0);corner.Parent=d.tag
+
+    d.tagBorder=Instance.new("UIStroke");d.tagBorder.Thickness=1;d.tagBorder.Transparency=0.55;d.tagBorder.Parent=d.tag
+
+    local function tagLabel(name,font,color)
+
+        local label=Instance.new("TextLabel");label.Name=name;label.Font=font
+
+        label.BackgroundTransparency=1;label.TextColor3=color;label.TextStrokeColor3=Color3.new(0,0,0)
+
+        label.TextStrokeTransparency=0.65;label.TextWrapped=false;label.TextTruncate=Enum.TextTruncate.AtEnd
+
+        label.TextXAlignment=Enum.TextXAlignment.Left;label.TextYAlignment=Enum.TextYAlignment.Center
+
+        label.ZIndex=4;label.Parent=d.tag
+
+        return label
+
+    end
+
+    d.roleLabel=tagLabel("Role",Enum.Font.GothamBold,Color3.fromRGB(246,74,90))
+
+    d.nameLabel=tagLabel("Name",Enum.Font.GothamMedium,Color3.fromRGB(245,247,250))
+
+    d.detailsLabel=tagLabel("Details",Enum.Font.Gotham,Color3.fromRGB(180,188,200))
+
+    d.separators={frame(d.tag,"Divider1",Color3.fromRGB(70,77,90)),frame(d.tag,"Divider2",Color3.fromRGB(70,77,90))}
+
+    for _,divider in ipairs(d.separators) do divider.BackgroundTransparency=0.35;divider.ZIndex=4 end
+
+    d.arrow=Instance.new("TextLabel"); d.arrow.Name="Offscreen"; d.arrow.Text=">"; d.arrow.TextSize=26
+
+    d.arrow.Font=Enum.Font.GothamBold; d.arrow.BackgroundTransparency=1; d.arrow.Size=UDim2.fromOffset(30,30)
+
+    d.arrow.AnchorPoint=Vector2.new(0.5,0.5); d.arrow.Parent=d.holder; d.arrow.Visible=false; d.arrow.ZIndex=3
+
+    for i=1,#skeletonPairs do d.bones[i]=frame(d.holder,"Bone"..i) end
+
+    visuals[object]=d; return d
+
+end
+
+local function roleEnabled(role)
+
+    return (role=="Murderer" and Opt.espMurderer) or (role=="Sheriff" and Opt.espSheriff)
+
+        or (role=="Hero" and Opt.espHero) or (role=="Innocent" and Opt.espInnocent)
+
+        or (role~="Murderer" and role~="Sheriff" and role~="Hero" and role~="Innocent")
+
+end
+
+--// ESP nameplate layout: one rounded strip, separated by spacing and dividers.
+
+local function nameplateLayout(info,textSize,viewport)
+
+    local entries={}
+
+    local widths=info.widths or {}
+
+    if info.title~="" then table.insert(entries,{key="roleLabel",text=info.title,size=math.max(10,textSize-1),width=math.min(widths.roleLabel or 76,100)}) end
+
+    if info.name~="" then table.insert(entries,{key="nameLabel",text=info.name,size=textSize,width=math.min(widths.nameLabel or 90,120)}) end
+
+    if info.details~="" then table.insert(entries,{key="detailsLabel",text=info.details,size=math.max(10,textSize-2),width=math.min(widths.detailsLabel or 70,130)}) end
+
+    local padding,gap=12,12
+
+    local natural=0
+
+    for _,entry in ipairs(entries) do natural+=entry.width end
+
+    local chrome=padding*2+math.max(0,#entries-1)*gap
+
+    local width=math.max(1,math.min(natural+chrome,320,viewport.X-16))
+
+    local height=math.max(24,textSize+12)
+
+    local factor=math.min(1,math.max(1,width-chrome)/math.max(natural,1))
+
+    local x=padding
+
+    for _,entry in ipairs(entries) do
+
+        entry.width=math.max(1,entry.width*factor);entry.x=x;entry.y=4;entry.height=height-8
+
+        x+=entry.width+gap
+
+    end
+
+    return entries,width,height
+
+end
+
+local function positionNameplate(point,width,height,viewport,occupied)
+
+    local margin=8
+
+    local x=math.clamp(point.X,math.min(width/2+margin,viewport.X/2),math.max(viewport.X/2,viewport.X-width/2-margin))
+
+    local y=math.clamp(point.Y-4,math.min(height+margin,viewport.Y-margin),math.max(height+margin,viewport.Y-margin))
+
+    if occupied then
+
+        local rect={left=x-width/2,right=x+width/2,top=y-height,bottom=y}
+
+        for _,other in ipairs(occupied) do
+
+            if rect.left<other.right+4 and rect.right>other.left-4 and rect.top<other.bottom+4 and rect.bottom>other.top-4 then
+
+                return x,y,false
+
+            end
+
+        end
+
+        table.insert(occupied,rect)
+
+    end
+
+    return x,y,true
+
+end
+
+--// End ESP nameplate layout.
+
+--// ESP frame synchronization. Smooth world motion, never the camera projection.
+
+local function smoothESPPosition(previous,current,dt)
+
+    if not previous or (current-previous).Magnitude>12 or dt>0.15 then return current end
+
+    return previous:Lerp(current,1-math.exp(-50*math.max(dt,0)))
+
+end
+
+--// End ESP frame synchronization.
+
+local function renderObject(object,position,color,info,on,humanoid,occupied,dt)
+
+    local camera=workspace.CurrentCamera
+
+    local d=visuals[object]
+
+    if not on then if d then destroyVisual(object) end; return end
+
+    d=getVisual(object); d.holder.Visible=true
+
+    d.worldPosition=smoothESPPosition(d.worldPosition,position,dt or 1/60)
+
+    position=d.worldPosition
+
+    color=info.roleColor or color
+
+    local accent=color
+
+    if d.themeAccent~=accent then
+
+        d.themeAccent=accent
+
+        d.tag.BackgroundColor3=Color3.new(1,1,1)
+
+        d.tagTint.Color=ColorSequence.new(accent:Lerp(Color3.fromRGB(4,7,13),0.86),Color3.fromRGB(4,7,13))
+
+        d.tagBorder.Color=accent;d.tagBorder.Transparency=0.22
+
+        d.tagAccent.BackgroundColor3=accent
+
+        d.detailsLabel.TextColor3=accent:Lerp(Color3.fromRGB(224,235,255),0.72)
+
+        for _,divider in ipairs(d.separators) do divider.BackgroundColor3=accent;divider.BackgroundTransparency=0.45 end
+
+    end
+
+    d.highlight.Enabled=Opt.highlight or object:IsA("BasePart")
+
+    d.highlight.FillColor=color; d.highlight.OutlineColor=color
+
+    d.highlight.FillTransparency=Opt.fill; d.highlight.OutlineTransparency=Opt.outline
+
+    d.highlight.DepthMode=Opt.throughWalls and Enum.HighlightDepthMode.AlwaysOnTop or Enum.HighlightDepthMode.Occluded
+
+    local screen,inside=camera:WorldToViewportPoint(position)
+
+    inside=inside and screen.Z>0
+
+    d.roleLabel.Visible=false;d.nameLabel.Visible=false;d.detailsLabel.Visible=false
+
+    local detailSample=info.detailSample or info.details
+
+    local measureKey=table.concat({info.title,info.name,detailSample,tostring(Opt.textSize)},"\0")
+
+    if d.measureKey~=measureKey then
+
+        d.textWidths={}
+
+        for _,entry in ipairs({{info.title,d.roleLabel,math.max(10,Opt.textSize-1),"roleLabel"},
+
+            {info.name,d.nameLabel,Opt.textSize,"nameLabel"},{detailSample,d.detailsLabel,math.max(10,Opt.textSize-2),"detailsLabel"}}) do
+
+            if entry[1]~="" then
+
+                d.textWidths[entry[4]]=TextService:GetTextSize(entry[1],entry[3],entry[2].Font,Vector2.new(10000,10000)).X+2
+
+            end
+
+        end
+
+        d.measureKey=measureKey
+
+    end
+
+    info.widths=d.textWidths
+
+    local rows,tagWidth,tagHeight=nameplateLayout(info,Opt.textSize,camera.ViewportSize)
+
+    d.tag.Size=UDim2.fromOffset(tagWidth,tagHeight)
+
+    d.roleLabel.TextColor3=info.roleColor or color
+
+    d.tag.Visible=inside and #rows>0
+
+    for _,divider in ipairs(d.separators) do divider.Visible=false end
+
+    for index,row in ipairs(rows) do
+
+        local label=d[row.key]
+
+        label.Text=row.text;label.TextSize=row.size;label.Visible=true
+
+        label.Position=UDim2.fromOffset(row.x,row.y);label.Size=UDim2.fromOffset(row.width,row.height)
+
+        if index>1 then
+
+            local divider=d.separators[index-1]
+
+            divider.Visible=true;divider.Position=UDim2.fromOffset(row.x-6,math.floor(tagHeight/2)-5)
+
+            divider.Size=UDim2.fromOffset(1,10)
+
+        end
+
+    end
+
+    d.arrow.Visible=not inside and Opt.arrows
+
+    if d.arrow.Visible then
+
+        local localPoint=camera.CFrame:PointToObjectSpace(position)
+
+        local direction=Vector2.new(localPoint.X,-localPoint.Y)
+
+        if direction.Magnitude<0.01 then direction=Vector2.new(0,1) end
+
+        direction=direction.Unit
+
+        local size=camera.ViewportSize; local center=size/2
+
+        local edge=math.min((center.X-40)/math.max(math.abs(direction.X),0.001),(center.Y-40)/math.max(math.abs(direction.Y),0.001))
+
+        local point=center+direction*edge
+
+        d.arrow.Position=UDim2.fromOffset(point.X,point.Y); d.arrow.Rotation=math.deg(math.atan2(direction.Y,direction.X)); d.arrow.TextColor3=color
+
+    end
+
+    for _,l in ipairs(d.lines) do l.Visible=false end
+
+    for _,l in ipairs(d.bones) do l.Visible=false end
+
+    d.healthBG.Visible=false; d.healthFill.Visible=false; d.tracer.Visible=false
+
+    if not inside then return end
+
+    local top=camera:WorldToViewportPoint(position+Vector3.new(0,3.2,0))
+
+    local bottom=camera:WorldToViewportPoint(position-Vector3.new(0,3,0))
+
+    local height=math.abs(bottom.Y-top.Y); local width=height*0.55
+
+    local left,right=screen.X-width/2,screen.X+width/2
+
+    local y1,y2=math.min(top.Y,bottom.Y),math.max(top.Y,bottom.Y)
+
+    local anchorPosition=position+Vector3.new(0,d.tagHeight,0)
+
+    if object:IsA("BasePart") then anchorPosition=position+Vector3.new(0,0.5,0) end
+
+    local tagPoint=camera:WorldToViewportPoint(anchorPosition)
+
+    d.tag.Visible=d.tag.Visible and tagPoint.Z>0
+
+    local tagX,tagY,clear=positionNameplate(tagPoint,tagWidth,tagHeight,camera.ViewportSize,d.tag.Visible and occupied or nil)
+
+    d.tag.Visible=d.tag.Visible and clear
+
+    d.tag.Position=UDim2.fromOffset(tagX,tagY)
+
+    if Opt.boxes and humanoid then
+
+        local boxColor=color
+
+        line(d.lines[1],Vector2.new(left,y1),Vector2.new(right,y1),boxColor,Opt.lineWidth)
+
+        line(d.lines[2],Vector2.new(left,y2),Vector2.new(right,y2),boxColor,Opt.lineWidth)
+
+        line(d.lines[3],Vector2.new(left,y1),Vector2.new(left,y2),boxColor,Opt.lineWidth)
+
+        line(d.lines[4],Vector2.new(right,y1),Vector2.new(right,y2),boxColor,Opt.lineWidth)
+
+    end
+
+    if Opt.tracers then line(d.tracer,Vector2.new(camera.ViewportSize.X/2,camera.ViewportSize.Y-15),Vector2.new(screen.X,y2),color,Opt.lineWidth) end
+
+    if Opt.healthBar and humanoid then
+
+        local ratio=math.clamp(humanoid.Health/math.max(humanoid.MaxHealth,1),0,1)
+
+        d.healthBG.Position=UDim2.fromOffset(left-7,y1); d.healthBG.Size=UDim2.fromOffset(4,height)
+
+        d.healthBG.Visible=true; d.healthFill.Visible=true; d.healthFill.AnchorPoint=Vector2.new(0,1)
+
+        d.healthFill.Position=UDim2.fromScale(0,1); d.healthFill.Size=UDim2.fromScale(1,ratio)
+
+        d.healthFill.BackgroundColor3=Color3.fromRGB(245,74,90):Lerp(Color3.fromRGB(90,215,157),ratio)
+
+    end
+
+    if Opt.skeleton and humanoid then
+
+        for i,pair in ipairs(skeletonPairs) do
+
+            local a,b=object:FindFirstChild(pair[1]),object:FindFirstChild(pair[2])
+
+            if a and b and a:IsA("BasePart") and b:IsA("BasePart") then
+
+                local sa,ona=camera:WorldToViewportPoint(a.Position); local sb,onb=camera:WorldToViewportPoint(b.Position)
+
+                if ona and onb and sa.Z>0 and sb.Z>0 then line(d.bones[i],Vector2.new(sa.X,sa.Y),Vector2.new(sb.X,sb.Y),color,Opt.lineWidth) end
+
+            end
+
+        end
+
+    end
+
+end
+
+local espEntries={}
+
+local function refreshESP()
+
+    table.clear(espEntries)
+
+    local _,_,root=character(); local seen={}; local marked=0
+
+    if not workspace.CurrentCamera then return end
+
+    local players=Players:GetPlayers()
+
+    if Opt.declutter then
+
+        local priorities={Murderer=0,Sheriff=1,Hero=2,Innocent=3}
+
+        table.sort(players,function(a,b)
+
+            local ad,bd=Round.PlayerData[a.Name],Round.PlayerData[b.Name]
+
+            local ap=ad and not ad.Dead and not ad.Killed and priorities[ad.Role] or 4
+
+            local bp=bd and not bd.Dead and not bd.Killed and priorities[bd.Role] or 4
+
+            if ap~=bp then return ap<bp end
+
+            return a.UserId<b.UserId
+
+        end)
+
+    end
+
+    for _,p in ipairs(players) do
+
+        local c=p.Character; local r=c and c:FindFirstChild("HumanoidRootPart")
+
+        if p~=Player and r then
+
+            seen[c]=true
+
+            local data=Round.PlayerData[p.Name]; local role=data and data.Role or "Lobby"
+
+            local distance=root and (root.Position-r.Position).Magnitude or math.huge
+
+            local active=living(p)
+
+            local show=Opt.esp and roleEnabled(role) and distance<=Opt.maxDistance and (not Opt.hideDead or active)
+
+                and (not Opt.espVisible or clearSight(r.Position,c))
+
+            local color=active and (palette[role] or palette.Innocent) or palette.Dead
+
+            if p==target then color=palette.Target end
+
+            local h=c:FindFirstChildOfClass("Humanoid"); local fields,samples={},{}
+
+            if Opt.distance then table.insert(fields,tostring(math.floor(distance)).." studs");table.insert(samples,"9999 studs") end
+
+            if Opt.health and h then table.insert(fields,tostring(math.floor(h.Health)).." HP");table.insert(samples,tostring(math.floor(h.MaxHealth)).." HP") end
+
+            if Opt.weapon then local t=c:FindFirstChildOfClass("Tool"); if t then table.insert(fields,t.Name);table.insert(samples,t.Name) end end
+
+            table.insert(espEntries,{object=c,part=r,color=color,on=show,humanoid=h,info={
+
+                title=Opt.role and (active and (roleNames[role] or role) or "Dead / lobby") or "",
+
+                name=Opt.names and p.DisplayName or "",
+
+                details=table.concat(fields,"   "),detailSample=table.concat(samples,"   "),
+
+                roleColor=active and (palette[role] or palette.Innocent) or palette.Dead,
+
+                isMurderer=active and role=="Murderer",
+
+            }})
+
+            if show then marked+=1 end
+
+        end
+
+    end
+
+    for _,g in ipairs(CS:GetTagged("GunDrop")) do
+
+        if g:IsA("BasePart") and g:IsDescendantOf(workspace) then
+
+            seen[g]=true
+
+            local dist=root and (root.Position-g.Position).Magnitude or 0
+
+            table.insert(espEntries,{object=g,part=g,color=palette.Gun,on=Opt.gunESP and dist<=Opt.maxDistance,info={title="Dropped gun",name="",details=Opt.distance and math.floor(dist).." studs" or "",detailSample=Opt.distance and "9999 studs" or ""}})
+
+        end
+
+    end
+
+    local stale={} for object in pairs(visuals) do if not seen[object] then table.insert(stale,object) end end
+
+    for _,object in ipairs(stale) do destroyVisual(object) end
+
+    Stats.visiblePlayers=marked
+
+end
+
+local function renderESP(dt)
+
+    if not workspace.CurrentCamera then return end
+
+    local occupied=Opt.declutter and {} or nil
+
+    for _,entry in ipairs(espEntries) do
+
+        if entry.object.Parent and entry.part.Parent then
+
+            renderObject(entry.object,entry.part.Position,entry.color,entry.info,entry.on,entry.humanoid,occupied,dt)
+
+        else destroyVisual(entry.object) end
+
+    end
+
+end
+
+local function walkTo(part, purpose, keepGoing)
+
+    if navigating or not living(Player) or not part then return end
+
+    navigating=true
+
+    local token=navVersion; local _,h,root=character()
+
+    purpose=purpose or "gun"
+
+    local destination=part.Position
+
+    local function cancelled()
+
+        return not alive or token~=navVersion or not living(Player) or not part.Parent or not root or not root.Parent
+
+            or (purpose=="opponent" and ((root.Position-part.Position).Magnitude<=5 or (part.Position-destination).Magnitude>4))
+
+            or (purpose=="gun" and weaponTool("Gun")~=nil) or (keepGoing and not keepGoing())
+
+    end
+
+    local ok,err=pcall(function()
+
+        local path=Paths:CreatePath({AgentRadius=2,AgentHeight=5,AgentCanJump=true})
+
+        path:ComputeAsync(root.Position,destination)
+
+        if cancelled() then return end
+
+        if path.Status~=Enum.PathStatus.Success then Stats.status="No path to "..purpose; return end
+
+        for _,wp in ipairs(path:GetWaypoints()) do
+
+            if cancelled() then return end
+
+            if wp.Action==Enum.PathWaypointAction.Jump then h.Jump=true end
+
+            h:MoveTo(wp.Position)
+
+            local deadline=os.clock()+2.5
+
+            repeat task.wait(0.1)
+
+            until cancelled() or (root.Position-wp.Position).Magnitude<3 or os.clock()>=deadline
+
+            if os.clock()>=deadline then Stats.status="Path interrupted"; return end
+
+        end
+
+        if not cancelled() then Stats.status="Reached "..purpose end
+
+    end)
+
+    navigating=false
+
+    if not ok then Stats.errors+=1; Stats.status=tostring(err) end
+
+end
+
+local function validPosition(position)
+
+    return position.X==position.X and position.Y==position.Y and position.Z==position.Z
+
+        and math.abs(position.X)<math.huge and math.abs(position.Y)<math.huge and math.abs(position.Z)<math.huge
+
+end
+
+local function teleportToPart(target, offset)
+
+    local c,h,root=character()
+
+    local function reject(message)
+
+        Stats.status=message;Stats.farm=message
+
+        return false
+
+    end
+
+    if not c or not h or not root or not root.Parent or not living(Player) then
+
+        return reject("Teleport paused: character unavailable")
+
+    end
+
+    if not target or not target:IsA("BasePart") or not target:IsDescendantOf(workspace) then
+
+        return reject("Teleport paused: target disappeared")
+
+    end
+
+    local destination=target.Position+offset
+
+    if not validPosition(destination) or destination.Y<=workspace.FallenPartsDestroyHeight+5 then
+
+        return reject("Teleport skipped: invalid destination")
+
+    end
+
+    -- Position the root directly: animated target rotations and model pivot offsets
+
+    -- must not turn a valid world position into an invalid character transform.
+
+    local ok=pcall(function() root.CFrame=CFrame.new(destination) end)
+
+    if not ok then return reject("Teleport failed: character changed") end
+
+    return true
+
+end
+
+local function tryGun()
+
+    local mine=Round.PlayerData[Player.Name]
+
+    if not living(Player) or not mine then Stats.status="Wait for a live round"; return end
+
+    if mine.Role=="Murderer" then Stats.status="The dropped gun is for innocents"; return end
+
+    if weaponTool("Gun") then Stats.status="You already have a gun"; return end
+
+    local g=CS:GetTagged("GunDrop")[1]
+
+    if not g or not g:IsA("BasePart") or not g:IsDescendantOf(workspace) then Stats.status="Waiting for a dropped gun"; return end
+
+    if Opt.gunMethod=="Teleport" then
+
+        if teleportToPart(g,Vector3.new(0,2,0)) then Stats.status="Waiting for gun pickup" end
+
+    else walkTo(g) end
+
+end
+
+--// Round automation. Movement and attacks are serialized in one worker.
+
+local function coinsEnabled() return (Opt.autoCoins or Opt.autoFarm) end -- [UNLOCKED]
+
+local function killsEnabled() return (Opt.autoKill or (Opt.autoFarm and Opt.farmMode=="Coins + Murderer")) end -- [UNLOCKED]
+
+local function bagFull(id)
+
+    if id and bagCounts[id] then return bagCounts[id].full end
+
+    local mainGui=Player.PlayerGui:FindFirstChild("MainGUI")
+
+    local gameGui=mainGui and mainGui:FindFirstChild("Game")
+
+    local bags=gameGui and gameGui:FindFirstChild("CoinBags")
+
+    local container=bags and bags:FindFirstChild("Container")
+
+    local bag=id and container and container:FindFirstChild(tostring(id))
+
+    local full=bag and bag:FindFirstChild("Full")
+
+    return full and full.Visible or false
+
+end
+
+local function availableCoin(coin)
+
+    return coin:IsA("BasePart") and coin:IsDescendantOf(workspace)
+
+        and validPosition(coin.Position) and not coin:GetAttribute("Collected") and not coin:GetAttribute("Delete") and not coin:GetAttribute("RoundEnd")
+
+        and not bagFull(coin:GetAttribute("CoinID")) and (coinRetry[coin] or 0)<=os.clock()
+
+end
+
+local function nearestCoin(root)
+
+    local best,distance=nil,math.huge
+
+    for _,coin in ipairs(CS:GetTagged("CoinVisual")) do
+
+        if availableCoin(coin) then
+
+            local d=(root.Position-coin.Position).Magnitude
+
+            if d<distance then best,distance=coin,d end
+
+        end
+
+    end
+
+    return best
+
+end
+
+local function collectCoin()
+
+    -- [UNLOCKED] -- if keyTier~="paid" then return end
+
+    local c,_,root=character()
+
+    if not c or not root or not living(Player) then return end
+
+    local coin=nearestCoin(root)
+
+    if not coin then Stats.farm="Waiting for coins / bag capacity";Stats.coinTarget="--";return end
+
+    Stats.coinTarget=tostring(coin:GetAttribute("CoinID") or coin.Name)
+
+    Stats.farm="Collecting coins"
+
+    if Opt.coinMethod=="Teleport" then
+
+        if not teleportToPart(coin,Vector3.new(0,2,0)) then coinRetry[coin]=os.clock()+3;return end
+
+    else
+
+        walkTo(coin,"coin",function() return coinsEnabled() and availableCoin(coin) end)
+
+    end
+
+    -- Give the server time to confirm; avoid repeatedly selecting an unreachable coin.
+
+    coinRetry[coin]=os.clock()+3
+
+end
+
+local function nearestOpponent(root)
+
+    local best,part,distance=nil,nil,math.huge
+
+    for _,p in ipairs(Players:GetPlayers()) do
+
+        local d=Round.PlayerData[p.Name]
+
+        local r=p.Character and p.Character:FindFirstChild("HumanoidRootPart")
+
+        if p~=Player and d and d.Role~="Murderer" and living(p) and r and validPosition(r.Position) then
+
+            local dist=(root.Position-r.Position).Magnitude
+
+            if dist<distance then best,part,distance=p,r,dist end
+
+        end
+
+    end
+
+    return best,part
+
+end
+
+local lastAttack=0
+
+local function killOpponent()
+
+    -- [UNLOCKED] -- if keyTier~="paid" then return false end
+
+    local mine=Round.PlayerData[Player.Name]
+
+    local c,h,root=character()
+
+    if not mine or mine.Role~="Murderer" or not living(Player) or not c or not h or not root then return false end
+
+    local opponent,part=nearestOpponent(root)
+
+    if not opponent then Stats.killTarget="--";return false end
+
+    local knife=weaponTool("Knife")
+
+    if not knife then Stats.farm="Waiting for your knife";return true end
+
+    Stats.killTarget=opponent.Name;Stats.farm="Chasing "..opponent.Name
+
+    if knife.Parent~=c then h:EquipTool(knife);return true end
+
+    if (part.Position-root.Position).Magnitude>5 then
+
+        if Opt.killMethod=="Teleport" then
+
+            if not teleportToPart(part,Vector3.new(0,0,3)) then return true end
+
+        else walkTo(part,"opponent",function()
+
+            local role=Round.PlayerData[Player.Name]
+
+            return killsEnabled() and role and role.Role=="Murderer" and living(opponent)
+
+        end) end
+
+    end
+
+    mine=Round.PlayerData[Player.Name]
+
+    if alive and killsEnabled() and mine and mine.Role=="Murderer" and living(Player) and living(opponent)
+
+        and part.Parent and root.Parent and (part.Position-root.Position).Magnitude<=5
+
+        and knife.Parent==c and knife.Enabled and os.clock()-lastAttack>=Opt.attackInterval then
+
+        lastAttack=os.clock();knife:Activate();Stats.farm="Attacking "..opponent.Name
+
+    end
+
+    return true
+
+end
+
+local gameplay=RS.Remotes.Gameplay
+
+local coinCollected=gameplay:FindFirstChild("CoinCollected")
+
+if coinCollected then connect(coinCollected.OnClientEvent,function(id,amount,capacity)
+
+    if type(amount)=="number" and type(capacity)=="number" then bagCounts[id]={amount=amount,capacity=capacity,full=amount>=capacity} end
+
+end) end
+
+local coinsStarted=gameplay:FindFirstChild("CoinsStarted")
+
+if coinsStarted then connect(coinsStarted.OnClientEvent,function()
+
+    table.clear(bagCounts);table.clear(coinRetry);cancelWalk()
+
+end) end
+
+local function automationStep()
+
+    if not living(Player) then
+
+        Stats.farm=(coinsEnabled() or killsEnabled()) and "Waiting for a live round" or "Idle"
+
+        Stats.coinTarget="--";Stats.killTarget="--";return
+
+    end
+
+    if killsEnabled() then
+
+        if killOpponent() then return end
+
+        local mine=Round.PlayerData[Player.Name]
+
+        if not coinsEnabled() and (not mine or mine.Role~="Murderer") then
+
+            Stats.farm="Waiting to be Murderer";Stats.killTarget="--";return
+
+        end
+
+    end
+
+    Stats.killTarget="--"
+
+    if (Opt.autoGun or manualGun) and not weaponTool("Gun") then
+
+        manualGun=false
+
+        local mine=Round.PlayerData[Player.Name]
+
+        if mine and mine.Role~="Murderer" and #CS:GetTagged("GunDrop")>0 then tryGun();return end
+
+    end
+
+    if coinsEnabled() then collectCoin() else Stats.farm="Idle";Stats.coinTarget="--" end
+
+end
+
+--// End round automation.
+
+local function updateProperties()
+
+    local _,h=character()
+
+    if h then
+
+        if Opt.speed then saveSet(h,"WalkSpeed",Opt.speedValue) else restore(h,"WalkSpeed") end
+
+        if Opt.jump then
+
+            if h.UseJumpPower then saveSet(h,"JumpPower",Opt.jumpValue)
+
+            else saveSet(h,"JumpHeight",Opt.jumpValue*Opt.jumpValue/(2*math.max(workspace.Gravity,1))) end
+
+        else restore(h,"JumpPower"); restore(h,"JumpHeight") end
+
+    end
+
+    local camera=workspace.CurrentCamera
+
+    if camera then if Opt.fov then saveSet(camera,"FieldOfView",Opt.fovValue) else restore(camera,"FieldOfView") end end
+
+    if Opt.bright then
+
+        saveSet(Lighting,"Brightness",3); saveSet(Lighting,"ClockTime",14)
+
+        saveSet(Lighting,"Ambient",Color3.fromRGB(175,175,175))
+
+    else restore(Lighting,"Brightness"); restore(Lighting,"ClockTime"); restore(Lighting,"Ambient") end
+
+
+
+end
+
+-- Desktop aim sends mouse input, including while RMB locks the pointer; it never writes Camera.CFrame.
+
+local function steerPointer(camera, point, dt)
+
+    local movePointer=(typeof(mousemoverel)=="function" and mousemoverel)
+
+        or (typeof(ENV.mousemoverel)=="function" and ENV.mousemoverel)
+
+    if not movePointer then Stats.status="This executor does not support pointer movement";return end
+
+    local projected,onScreen=camera:WorldToViewportPoint(point)
+
+    if not onScreen or projected.Z<=0 then return end
+
+    local mouse=cursor()
+
+    local alpha=1-math.exp(-(60/math.max(3,Opt.smooth))*math.min(dt,0.1))
+
+    movePointer((projected.X-mouse.X)*alpha,(projected.Y-mouse.Y)*alpha)
+
+end
+
+-- Orbit the subject on touch instead of rotating a camera stuck behind the avatar.
+
+local function steerAim(camera, point, dt, touch)
+
+    local alpha = 1 - math.exp(-(60 / math.max(3, Opt.smooth)) * math.min(dt, 0.1))
+
+    local position = camera.CFrame.Position
+
+    local pivot = camera.Focus.Position
+
+    local offset = position - pivot
+
+    local horizontal = Vector3.new(offset.X, 0, offset.Z)
+
+    local toward = Vector3.new(point.X - pivot.X, 0, point.Z - pivot.Z)
+
+    if touch and offset.Magnitude > 1.5 and horizontal.Magnitude > 0.5 and toward.Magnitude > 0.5 then
+
+        -- A slight shoulder angle keeps the avatar away from the crosshair.
+
+        local goal = -toward.Unit
+
+        local shoulderAngle = math.atan2(math.min(1.5, horizontal.Magnitude * 0.2), horizontal.Magnitude)
+
+        local desired = Vector3.new(goal.X * math.cos(shoulderAngle) - goal.Z * math.sin(shoulderAngle), 0,
+
+            goal.X * math.sin(shoulderAngle) + goal.Z * math.cos(shoulderAngle))
+
+        local current = horizontal.Unit
+
+        local angle = math.atan2(current.X * desired.Z - current.Z * desired.X, current:Dot(desired)) * alpha
+
+        local direction = Vector3.new(current.X * math.cos(angle) - current.Z * math.sin(angle), 0,
+
+            current.X * math.sin(angle) + current.Z * math.cos(angle))
+
+        local nextPosition = pivot + direction * horizontal.Magnitude + Vector3.new(0, offset.Y, 0)
+
+        local params = RaycastParams.new()
+
+        params.FilterType = Enum.RaycastFilterType.Exclude
+
+        params.FilterDescendantsInstances = Player.Character and {Player.Character} or {}
+
+        local hit = workspace:Raycast(pivot, nextPosition - pivot, params)
+
+        if hit then nextPosition = hit.Position + hit.Normal * 0.3 end
+
+        if (point - nextPosition).Magnitude > 0.1 then camera.CFrame = CFrame.lookAt(nextPosition, point) end
+
+    elseif (point - position).Magnitude > 0.1 then
+
+        camera.CFrame = camera.CFrame:Lerp(CFrame.lookAt(position, point), alpha)
+
+    end
+
+end
+
+local aimTime,espTime=0,0.1
+
+RunService:BindToRenderStep("ATLAS_MM2_Aim",Enum.RenderPriority.Camera.Value+1,function(dt)
+
+    if not alive then return end
+
+    local ok,err=pcall(function()
+
+        aimTime+=dt; espTime+=dt
+
+        if Opt.aimbot or aimTime>=0.05 then
+
+            aimTime=0
+
+            if Opt.aimbot or Opt.silent then target,targetPosition=chooseTarget() else target,targetPosition=nil,nil end
+
+            Stats.target=target and target.Name or "--"
+
+        end
+
+        local mouse=cursor()
+
+        circle.Position=UDim2.fromOffset(mouse.X-overlay.AbsolutePosition.X,mouse.Y-overlay.AbsolutePosition.Y); circle.Size=UDim2.fromOffset(Opt.radius*2,Opt.radius*2)
+
+        circle.Visible=Opt.drawFov
+
+        local touch = touchAim()
+
+        local engaged = not Opt.aimHold or (touch and heldWeapon())
+
+            or (not touch and UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2))
+
+        if Opt.aimbot and targetPosition and engaged and not UIS:GetFocusedTextBox() and not Library.Open then
+
+            local camera=workspace.CurrentCamera
+
+            if camera then
+
+                if touch then steerAim(camera,targetPosition,dt,true) else steerPointer(camera,targetPosition,dt) end
+
+            end
+
+        end
+
+        if espTime>=0.1 then espTime=0; refreshESP() end
+
+        renderESP(dt)
+
+    end)
+
+    if not ok then Stats.errors+=1; Stats.status=tostring(err) end
+
+end)
+
+connect(Player.CharacterAdded,cancelWalk)
+
+connect(RS.Remotes.Gameplay.GameOver.OnClientEvent,function() cancelWalk(); target=nil; targetPosition=nil end)
+
+spawn(function()
+
+    while alive do
+
+        local ok,err=pcall(updateProperties)
+
+        if not ok then Stats.errors+=1; Stats.status=tostring(err) end
+
+        task.wait(0.25)
+
+    end
+
+end)
+
+spawn(function()
+
+    while alive do
+
+        local ok,err=pcall(automationStep)
+
+        if not ok then Stats.errors+=1;Stats.farm="Paused: "..tostring(err) end
+
+        task.wait(0.2)
+
+    end
+
+end)
+
+ENV.ATLAS_MM2={Library=Library,Window=Window,Options=Opt,Stats=Stats,Stop=stop,
+
+    Refresh=function() updateProperties(); refreshESP(); renderESP() end,EnsureSilent=ensureSilent,
+
+    ChooseTarget=chooseTarget,TryGun=tryGun,Palette=palette}
+
+updateProperties()
+
+Window:SelectTab(Main); Library:SetOpen(true)
+
+return {ready=true,tabs=#Window.Tabs,first="Main",silentAvailable=type(Weapon.GetMouseTargetCFrame)=="function"}
+
