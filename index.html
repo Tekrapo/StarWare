@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#090611">
+<title>StarWare — Roblox Script Hub</title>
+<meta name="description" content="StarWare — каталог Roblox-скриптов. Поиск, избранное и копирование загрузчиков.">
+<style>
+:root{--bg:#08060f;--panel:#100c1c;--panel2:#171027;--line:#2b2040;--purple:#9b5cff;--pink:#d36bff;--text:#f6f0ff;--muted:#a99bbd;--good:#8ef0c1;--shadow:0 18px 60px #0008}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(ellipse at 80% -10%,#49208055,transparent 38%),radial-gradient(ellipse at 0% 35%,#29144c55,transparent 30%),var(--bg);color:var(--text);font:15px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial}
+a{color:inherit;text-decoration:none}button,input{font:inherit}.wrap{width:min(1120px,calc(100% - 36px));margin:auto}
+header{position:sticky;top:0;z-index:10;background:#090611d9;backdrop-filter:blur(18px);border-bottom:1px solid #ffffff12}
+.nav{height:72px;display:flex;align-items:center;justify-content:space-between;gap:20px}.brand{display:flex;align-items:center;gap:11px;font-weight:900;letter-spacing:.4px;font-size:19px}.logo{width:38px;height:38px;border-radius:13px;display:grid;place-items:center;background:linear-gradient(135deg,#a855f7,#5925a8);box-shadow:0 0 28px #9b5cff66;font-size:20px}.navlinks{display:flex;gap:24px;color:var(--muted);font-weight:600}.navlinks a:hover{color:white}.status{font-size:12px;color:var(--good);border:1px solid #8ef0c133;background:#8ef0c10c;padding:7px 11px;border-radius:999px}
+.hero{padding:82px 0 54px;display:grid;grid-template-columns:1.25fr .75fr;gap:36px;align-items:center}.eyebrow{display:inline-flex;gap:8px;align-items:center;color:#d8baff;border:1px solid #9b5cff55;background:#9b5cff12;padding:7px 12px;border-radius:999px;font-size:12px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase}.dot{width:7px;height:7px;background:#b77aff;border-radius:50%;box-shadow:0 0 12px #b77aff}
+h1{font-size:clamp(42px,7vw,76px);line-height:.99;letter-spacing:-3px;margin:22px 0 18px}h1 span{background:linear-gradient(90deg,#fff,#c49aff 55%,#8b4dff);background-clip:text;color:transparent}.lead{color:var(--muted);font-size:17px;max-width:580px}.actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:28px}.btn{border:1px solid var(--line);padding:12px 17px;border-radius:13px;color:white;background:#ffffff08;font-weight:800;cursor:pointer;transition:.2s}.btn:hover{transform:translateY(-2px);border-color:#a76bff;box-shadow:0 8px 26px #9b5cff22}.btn.primary{border:0;background:linear-gradient(100deg,#8b45e8,#b45cff);box-shadow:0 8px 28px #8b45e855}.hero-card{border:1px solid #9b5cff55;border-radius:24px;background:linear-gradient(145deg,#1b1230,#0d0917 72%);padding:22px;box-shadow:var(--shadow),0 0 50px #7e39d522;position:relative;overflow:hidden}.hero-card:before{content:"";position:absolute;width:220px;height:220px;background:#a45bff22;filter:blur(50px);right:-70px;top:-90px}.orb{height:190px;border-radius:18px;background:radial-gradient(circle at 50% 45%,#d4a9ff 0 2%,#9b5cff 3% 8%,#612bb1 18%,#25123e 46%,#100b1a 70%);position:relative;display:grid;place-items:center;overflow:hidden}.orb:before,.orb:after{content:"";position:absolute;width:260px;height:70px;border:1px solid #d9b7ff88;border-radius:50%;transform:rotate(-24deg);box-shadow:0 0 20px #b46bff66}.orb:after{transform:rotate(36deg);width:220px;height:110px}.orb b{font-size:44px;text-shadow:0 0 25px #fff;z-index:1}.statrow{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}.stat{background:#ffffff08;border:1px solid #ffffff12;border-radius:13px;padding:12px}.stat strong{display:block;font-size:20px}.stat small{color:var(--muted)}
+section{padding:34px 0 58px}.section-head{display:flex;justify-content:space-between;align-items:end;gap:18px;margin-bottom:22px}h2{font-size:29px;letter-spacing:-.8px;margin:0}.sub{color:var(--muted);margin:5px 0 0}.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px}.search{flex:1;min-width:210px;position:relative}.search input{width:100%;background:#100c1c;border:1px solid var(--line);color:white;border-radius:13px;padding:13px 15px;outline:none}.search input:focus{border-color:var(--purple);box-shadow:0 0 0 3px #9b5cff20}.filter{background:#100c1c;border:1px solid var(--line);color:#e9ddfa;padding:0 13px;border-radius:13px;outline:none}.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}.chip{background:#ffffff08;border:1px solid #ffffff18;color:var(--muted);border-radius:999px;padding:7px 13px;cursor:pointer;font-weight:700}.chip.active,.chip:hover{background:#9b5cff22;color:white;border-color:#9b5cff88}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:15px}.script{background:linear-gradient(150deg,#171027,#0e0a17);border:1px solid #ffffff14;border-radius:18px;padding:18px;transition:.22s;min-width:0}.script:hover{transform:translateY(-4px);border-color:#9b5cff77;box-shadow:0 14px 35px #0006}.cardtop{display:flex;justify-content:space-between;align-items:center}.gameicon{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;background:linear-gradient(135deg,#3a205b,#211333);font-size:20px}.tag{font-size:11px;color:#d9bcff;background:#9b5cff18;border:1px solid #9b5cff44;border-radius:999px;padding:5px 9px}.script h3{font-size:18px;margin:14px 0 5px}.script p{color:var(--muted);font-size:13px;min-height:40px;margin:0}.meta{display:flex;gap:8px;flex-wrap:wrap;color:#8f819f;font-size:11px;margin:14px 0}.code{background:#090611;border:1px solid #ffffff12;border-radius:10px;padding:10px;color:#c9a9ff;font:11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cardactions{display:flex;gap:8px;margin-top:12px}.cardactions .btn{flex:1;padding:9px 10px;font-size:12px}.fav{width:38px;flex:0 0 38px!important;padding:8px!important}.empty{grid-column:1/-1;text-align:center;color:var(--muted);border:1px dashed var(--line);padding:35px;border-radius:16px}
+.notice{border:1px solid #a76bff44;background:linear-gradient(100deg,#9b5cff12,#ffffff04);padding:19px;border-radius:16px;color:#cbbbdc}.notice strong{color:white}
+footer{border-top:1px solid #ffffff12;padding:28px 0;color:#897d99;font-size:12px}.foot{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.toast{position:fixed;bottom:22px;left:50%;transform:translate(-50%,20px);background:#211533;border:1px solid #a76bff88;color:white;padding:11px 16px;border-radius:12px;opacity:0;pointer-events:none;transition:.25s;z-index:20;box-shadow:var(--shadow)}.toast.show{opacity:1;transform:translate(-50%,0)}
+@media(max-width:800px){.hero{grid-template-columns:1fr;padding-top:58px}.hero-card{max-width:520px}.grid{grid-template-columns:repeat(2,1fr)}.navlinks{display:none}}
+@media(max-width:540px){.wrap{width:min(100% - 26px,1120px)}.grid{grid-template-columns:1fr}.hero{padding-top:45px}.hero-card{padding:14px}.orb{height:150px}h1{letter-spacing:-2px}.section-head{align-items:start;flex-direction:column}.status{font-size:10px}}
+</style>
+</head>
+<body>
+<header><div class="wrap nav">
+  <a class="brand" href="#"><span class="logo">✦</span> STARWARE</a>
+  <nav class="navlinks"><a href="#catalog">Каталог</a><a href="#about">О проекте</a><a href="#safety">Безопасность</a></nav>
+  <span class="status">● HUB ONLINE</span>
+</div></header>
+<main>
+<div class="wrap hero">
+  <div>
+    <span class="eyebrow"><i class="dot"></i> Roblox script collection</span>
+    <h1>YOUR NEXT<br><span>LEVEL STARTS</span><br>HERE.</h1>
+    <p class="lead">StarWare — каталог скриптов для Roblox. Находи нужные инструменты, копируй загрузчики и сохраняй любимые проекты.</p>
+    <div class="actions"><a class="btn primary" href="#catalog">Открыть каталог ↗</a><a class="btn" href="#about">Подробнее</a></div>
+  </div>
+  <div class="hero-card">
+    <div class="orb"><b>✦</b></div>
+    <div class="statrow"><div class="stat"><strong id="scriptCount">0</strong><small>скриптов</small></div><div class="stat"><strong>24/7</strong><small>доступ</small></div><div class="stat"><strong>∞</strong><small>возможностей</small></div></div>
+  </div>
+</div>
+<section id="catalog"><div class="wrap">
+  <div class="section-head"><div><h2>Каталог скриптов</h2><p class="sub">Выбери проект и скопируй загрузчик.</p></div><span class="tag">STARWARE LIBRARY</span></div>
+  <div class="toolbar"><div class="search"><input id="search" type="search" placeholder="Поиск по названию или игре..."></div><select class="filter" id="sort"><option value="name">По названию</option><option value="new">Сначала новые</option></select></div>
+  <div class="filters" id="filters"><button class="chip active" data-filter="Все">Все</button><button class="chip" data-filter="MM2">MM2</button><button class="chip" data-filter="Universal">Universal</button><button class="chip" data-filter="Other">Other</button><button class="chip" data-filter="Избранное">♥ Избранное</button></div>
+  <div class="grid" id="catalogGrid"></div>
+</div></section>
+<section id="about"><div class="wrap"><div class="section-head"><div><h2>Что такое StarWare?</h2><p class="sub">Единое место для твоих Roblox-проектов.</p></div></div>
+  <div class="grid">
+    <article class="script"><div class="gameicon">⌕</div><h3>Быстрый поиск</h3><p>Находи нужный скрипт по названию, игре или категории.</p></article>
+    <article class="script"><div class="gameicon">⚡</div><h3>Копирование в один клик</h3><p>Копируй загрузчик без ручного выделения длинного текста.</p></article>
+    <article class="script"><div class="gameicon">♡</div><h3>Избранное</h3><p>Сохраняй интересные карточки в этом браузере.</p></article>
+  </div>
+</div></section>
+<section id="safety"><div class="wrap"><div class="notice"><strong>⚠ Важное предупреждение.</strong> Скрипты Roblox могут выполнять удалённый код и влиять на игровой аккаунт или устройство. Проверяй исходники и источники перед запуском. StarWare — каталог, а не гарантия безопасности стороннего кода.</div></div></section>
+</main>
+<footer><div class="wrap foot"><span>© <span id="year"></span> STARWARE. COMMUNITY PROJECT.</span><span>BLACK / PURPLE EDITION · MADE FOR MOBILE & DESKTOP</span></div></footer>
+<div class="toast" id="toast">Скопировано!</div>
+<script>
+/* Добавляй свои скрипты в массив ниже. Для каждого укажи название, игру,
+   категорию и проверенный raw GitHub URL. Не добавляй неизвестные загрузчики. */
+const scripts = [
+ {name:"StarWare",game:"Universal",category:"Universal",icon:"✦",description:"Основной проект StarWare. Добавь сюда краткое описание возможностей.",url:"https://raw.githubusercontent.com/Tekrapo/StarWare/main/StarWare.txt",updated:"Основной проект"},
+ {name:"AntiGay",game:"MM2",category:"MM2",icon:"⚔",description:"Скрипт из репозитория StarWare. Проверь исходный код перед запуском.",url:"https://raw.githubusercontent.com/Tekrapo/StarWare/10ab0a315c94bb80e2442c1374e630f2f6b04c1a/AntiGay.txt",updated:"GitHub"},
+ {name:"AntiAim",game:"MM2",category:"MM2",icon:"◎",description:"Модуль Anti-Aim. Используй только в совместимой среде.",url:"",updated:"Локальный файл"},
+ {name:"Tek Obfuscated",game:"Universal",category:"Universal",icon:"⌘",description:"Обфусцированный файл. Исходник трудно проверить — будь осторожен.",url:"https://raw.githubusercontent.com/Tekrapo/StarWare/f0ce91732ed996b83480774647858fe51d6a542f/Tek.obfuscated.lua.txt",updated:"GitHub"}
+];
+const grid=document.getElementById("catalogGrid"),search=document.getElementById("search"),sort=document.getElementById("sort");
+let active="Все";let favorites=JSON.parse(localStorage.getItem("starware-favs")||"[]");
+document.getElementById("scriptCount").textContent=scripts.length;
+document.getElementById("year").textContent=new Date().getFullYear();
+function toast(msg){const t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1900)}
+function render(){
+ let list=scripts.filter(s=>(active==="Все"||(active==="Избранное"?favorites.includes(s.name):s.category===active))&&(`${s.name} ${s.game} ${s.description}`.toLowerCase().includes(search.value.toLowerCase())));
+ if(sort.value==="name")list.sort((a,b)=>a.name.localeCompare(b.name));
+ if(sort.value==="new")list.reverse();
+ grid.innerHTML="";
+ if(!list.length){grid.innerHTML='<div class="empty">Ничего не найдено. Попробуй изменить запрос.</div>';return}
+ list.forEach(s=>{
+  const card=document.createElement("article");card.className="script";
+  const top=document.createElement("div");top.className="cardtop";
+  const ico=document.createElement("div");ico.className="gameicon";ico.textContent=s.icon;
+  const tag=document.createElement("span");tag.className="tag";tag.textContent=s.game;
+  top.append(ico,tag);
+  const h=document.createElement("h3");h.textContent=s.name;
+  const p=document.createElement("p");p.textContent=s.description;
+  const meta=document.createElement("div");meta.className="meta";meta.textContent="✦ "+s.updated+"  ·  "+s.category;
+  const code=document.createElement("div");code.className="code";code.textContent=s.url?"raw GitHub loader ready":"URL не добавлен — добавь ссылку в код";
+  const actions=document.createElement("div");actions.className="cardactions";
+  const copy=document.createElement("button");copy.className="btn primary";copy.textContent="Copy Script";
+  copy.disabled=!s.url;if(!s.url)copy.style.opacity=".45";
+  copy.onclick=async()=>{const loader=`loadstring(game:HttpGet("${s.url}"))()`;try{await navigator.clipboard.writeText(loader);toast("Загрузчик скопирован!")}catch(e){toast("Браузер запретил копирование — скопируй вручную.")}};
+  const fav=document.createElement("button");fav.className="btn fav";fav.textContent=favorites.includes(s.name)?"♥":"♡";fav.title="Избранное";
+  fav.onclick=()=>{favorites=favorites.includes(s.name)?favorites.filter(x=>x!==s.name):[...favorites,s.name];localStorage.setItem("starware-favs",JSON.stringify(favorites));render()};
+  actions.append(copy,fav);card.append(top,h,p,meta,code,actions);grid.append(card);
+ });
+}
+document.querySelectorAll(".chip").forEach(b=>b.onclick=()=>{active=b.dataset.filter;document.querySelectorAll(".chip").forEach(x=>x.classList.toggle("active",x===b));render()});
+search.oninput=render;sort.onchange=render;render();
+</script>
+</body></html>
