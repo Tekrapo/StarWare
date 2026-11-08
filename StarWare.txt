@@ -1,7 +1,7 @@
 --!nocheck
 --!nolint
 -- ============================================================
---  STARWARE FLUENT — Compact + Fixes
+--  STARWARE FLUENT — Compact + Fixed wallbang/aim/tracer
 -- ============================================================
 if getgenv().UN_ADDON and getgenv().UN_ADDON.loaded then
     pcall(function() getgenv().UN_ADDON.unload() end)
@@ -15,7 +15,7 @@ local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.
 
 local Window = Fluent:CreateWindow({
     Title = "StarWare",
-    SubTitle = "Compact · Auto-Aim",
+    SubTitle = "Compact · Fixed",
     TabWidth = 140,
     Size = UDim2.fromOffset(520, 420),
     Acrylic = true,
@@ -36,23 +36,16 @@ local Tabs = {
 }
 local Options = Fluent.Options
 
--- ============================================================
--- SERVICES
--- ============================================================
 local Players    = game:GetService("Players")
 local RS         = game:GetService("RunService")
 local Replicated = game:GetService("ReplicatedStorage")
 local Stats      = game:GetService("Stats")
 local UIS        = game:GetService("UserInputService")
-local Debris     = game:GetService("Debris")
 local L          = game:GetService("Lighting")
 local LP         = Players.LocalPlayer
 local Cam        = workspace.CurrentCamera
 
--- ============================================================
--- STATE
--- ============================================================
-local SA = { master=false, auto=true, predMs=100, part="Torso", wb=true, quiet=true, ping=100, jitter=0, targetDist=0, wbDist=30 }
+local SA = { master=false, auto=true, predMs=100, part="Torso", wb=true, wbDist=30, ping=100, jitter=0, targetDist=0 }
 local SA_hist = {}
 local pingHistory = {}
 local KS = { enabled=false }
@@ -96,9 +89,6 @@ local startInfJump, stopInfJump, startNoclip, stopNoclip
 local startFly, stopFly, startSpin, stopSpin, moveReset
 local applyTime, toggleFog, ka_tick, hookKills
 
--- ============================================================
--- HELPERS
--- ============================================================
 local function notif(txt, on)
     Fluent:Notify({ Title = "StarWare", Content = tostring(txt), SubContent = on and "ON" or "OFF", Duration = 2 })
 end
@@ -149,9 +139,6 @@ local function cachedRole(pl)
     return getRole(pl)
 end
 
--- ============================================================
--- TARGETING
--- ============================================================
 local rp = RaycastParams.new()
 rp.FilterType = Enum.RaycastFilterType.Exclude
 local function refresh_target()
@@ -193,9 +180,6 @@ nearest_player = function()
     return best
 end
 
--- ============================================================
--- PING
--- ============================================================
 local function getPing()
     local ok, ms = pcall(function() return Stats.Network.ServerStatsItem["Data Ping"]:GetValue() end)
     return (ok and type(ms)=="number" and ms>0) and ms or 100
@@ -230,9 +214,6 @@ task.spawn(function()
     while ADDON.loaded do task.wait(1); pcall(updateAutoConfig) end
 end)
 
--- ============================================================
--- VELOCITY HISTORY
--- ============================================================
 task.spawn(function()
     while ADDON.loaded do
         task.wait(0.05)
@@ -260,9 +241,6 @@ local function getVelocity(root)
     return (b[2]-a[2]) / dt
 end
 
--- ============================================================
--- WALLBANG
--- ============================================================
 local function rayBlocked(a,b,ignore)
     local list = { workspace.CurrentCamera }
     for _, x in ipairs(ignore or {}) do table.insert(list, x) end
@@ -309,15 +287,20 @@ local function findWbSpot(mRoot, muzzle, maxDist)
     end
 end
 
--- ============================================================
--- WEAPON HOOK — FIX: temporarily move attachment
--- ============================================================
 local WSH = {}
 get_ws_fn = function()
     if WSH.m then return WSH.m end
     local ok,m = pcall(function() return require(Replicated:WaitForChild("ClientServices"):WaitForChild("WeaponService")) end)
     if ok and type(m)=="table" then WSH.m=m end
     return WSH.m
+end
+local function origin_cf()
+    local c = LP.Character
+    local hrp = c and c:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+    local att = hrp:FindFirstChild("GunRaycastAttachment")
+    if att then return att.WorldCFrame end
+    return hrp.CFrame
 end
 local function resolve()
     if not SA.master then return nil end
@@ -344,15 +327,20 @@ local function resolve()
     local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
     local att = myRoot and myRoot:FindFirstChild("GunRaycastAttachment")
     local muzzle = att and att.WorldPosition or (myRoot and myRoot.Position)
-    -- FIX: move attachment to wallbang spot
+    -- visual handle pos для трасера
+    local gun = myChar and myChar:FindFirstChild("Gun")
+    local handle = gun and gun:FindFirstChild("Handle")
+    local handlePos = handle and handle.Position or muzzle
+    -- FIX: keep attachment moved for 350ms
     if SA.wb and att and muzzle and rayBlocked(muzzle, root.Position, {c, myChar}) and not anyVisible(c, muzzle) then
         local wbSpot = findWbSpot(root, muzzle, SA.wbDist)
         if wbSpot then
-            local oldCF = att.CFrame
+            if not WSH.wbOrigCF then
+                WSH.wbOrigCF = att.CFrame
+                WSH.wbAtt = att
+            end
             att.WorldPosition = wbSpot
-            task.defer(function()
-                if att.Parent then att.CFrame = oldCF end
-            end)
+            WSH.wbUntil = os.clock() + 0.35
             muzzle = wbSpot
         end
     end
@@ -360,6 +348,7 @@ local function resolve()
     local fallback
     rp.FilterDescendantsInstances = { myChar, workspace.CurrentCamera }
     local fromPos = muzzle or root.Position
+    local result = nil
     for _, name in ipairs(order) do
         local part = c:FindFirstChild(name)
         if part and part:IsA("BasePart") then
@@ -367,10 +356,21 @@ local function resolve()
             fallback = fallback or aimPos
             local dir = aimPos - fromPos
             local hit = workspace:Raycast(fromPos, dir, rp)
-            if not hit or hit.Instance:IsDescendantOf(c) then return aimPos end
+            if not hit or hit.Instance:IsDescendantOf(c) then
+                result = aimPos
+                break
+            end
         end
     end
-    return fallback or (root.Position + off)
+    result = result or fallback or (root.Position + off)
+    -- FIX: сохраняем реальный путь выстрела для трасера
+    WSH.lastShot = {
+        handle = handlePos,   -- визуальный ствол
+        from   = muzzle,      -- точка выстрела (после wallbang)
+        to     = result,      -- цель (куда стреляем)
+        time   = os.clock(),
+    }
+    return result
 end
 install_hooks = function()
     local m = get_ws_fn(); if not m then return end
@@ -378,14 +378,20 @@ install_hooks = function()
     if type(m.GetMouseTargetCFrame)=="function" and not WSH.om then
         WSH.om = m.GetMouseTargetCFrame
         m.GetMouseTargetCFrame = function(self,...)
+            WSH.lastHook = os.clock()
             local pt = resolve()
-            if pt then return CFrame.new(pt) end
+            if pt then
+                local orig = origin_cf()
+                local fromPos = orig and orig.Position or pt
+                return CFrame.lookAt(fromPos, pt)
+            end
             return WSH.om(self,...)
         end
     end
     if type(m.GetTargetPosition)=="function" and not WSH.os then
         WSH.os = m.GetTargetPosition
         m.GetTargetPosition = function(self,x,y,...)
+            WSH.lastHook = os.clock()
             local pt = resolve()
             if pt then return pt end
             return WSH.os(self,x,y,...)
@@ -403,9 +409,50 @@ getgenv().KNIFE_AIM_RESOLVE = function()
     return CFrame.new(part.Position + vel)
 end
 
--- ============================================================
--- KILL AURA
--- ============================================================
+local function findGunRemote(gun)
+    local kl = gun:FindFirstChild("KnifeLocal")
+    local cb = kl and kl:FindFirstChild("CreateBeam")
+    local rf = cb and cb:FindFirstChild("RemoteFunction")
+    if rf then return rf end
+    for _, d in ipairs(gun:GetDescendants()) do
+        if (d:IsA("RemoteEvent") or d:IsA("RemoteFunction")) and d.Name:lower():find("shoot") then
+            return d
+        end
+    end
+end
+local gunHooked = nil
+task.spawn(function()
+    while ADDON.loaded do
+        task.wait(0.5)
+        local char = LP.Character
+        local gun = char and char:FindFirstChild("Gun")
+        if gun and gun ~= gunHooked then
+            gunHooked = gun
+            gun.Activated:Connect(function()
+                if not SA.master then return end
+                task.wait(0.05)
+                if os.clock() - (WSH.lastHook or 0) > 0.1 then
+                    local aimPos = resolve()
+                    if aimPos then
+                        local remote = findGunRemote(gun)
+                        if remote then
+                            local orig = origin_cf()
+                            local from = orig or CFrame.new(aimPos)
+                            pcall(function()
+                                if remote:IsA("RemoteFunction") then
+                                    remote:InvokeServer(1, aimPos, "AH2")
+                                else
+                                    remote:FireServer(from, CFrame.lookAt(aimPos, aimPos + (aimPos - from.Position).Unit))
+                                end
+                            end)
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
+
 ka_tick = function()
     if not KA.on then return end
     local c = LP.Character; if not c then return end
@@ -440,9 +487,6 @@ ka_tick = function()
     if fired then KA.last = now end
 end
 
--- ============================================================
--- AUTO GUN
--- ============================================================
 local function grab_has_role()
     if not grab_round_mod then
         local ok,m = pcall(function() return require(Replicated:WaitForChild("Modules"):WaitForChild("CurrentRoundClient")) end)
@@ -482,7 +526,7 @@ local function grab_desc_stop()
 end
 
 -- ============================================================
--- TRACER
+-- TRACER — FIXED: реальная линия выстрела
 -- ============================================================
 local function to_pos(v)
     if typeof(v)=="Vector3" then return v end
@@ -492,39 +536,86 @@ local function to_pos(v)
         if v:IsA("BasePart") then return v.Position end
     end
 end
+
+local function drawBeam(from, to, color, dim)
+    local d = to - from
+    local dist = d.Magnitude
+    if dist < 0.15 then return end
+    local p = Instance.new("Part")
+    p.Name = "sBeam"; p.Anchored = true
+    p.CanCollide = false; p.CanQuery = false; p.CanTouch = false; p.CastShadow = false
+    p.Material = Enum.Material.Neon; p.Color = color
+    local thickness = dim and (SZ.tracer * 0.6) or SZ.tracer
+    p.Size = Vector3.new(thickness, thickness, dist)
+    p.CFrame = CFrame.lookAt(from + d/2, to)
+    p.Transparency = dim and 0.55 or 0.05
+    p.Parent = workspace
+    local li = Instance.new("PointLight", p)
+    li.Color = color; li.Brightness = dim and 1 or 3; li.Range = dim and 6 or 12
+    local startT = dim and 0.55 or 0.05
+    local startB = dim and 1 or 3
+    local ts = 0
+    local cn
+    cn = RS.Heartbeat:Connect(function(dt)
+        ts = ts + dt; local k = ts/0.6
+        if k >= 1 or not p.Parent then cn:Disconnect(); if p.Parent then p:Destroy() end; return end
+        p.Transparency = startT + k*(1-startT)
+        li.Brightness = startB*(1-k)
+    end)
+end
+
 enableTracer_fn = function()
     if TRACE.conn then return end
     local m = get_ws_fn()
     local ev = m and m.GunFired
-    if typeof(ev)~="Instance" then return end
-    TRACE.conn = ev.OnClientEvent:Connect(function(gun,a,b)
+    if typeof(ev) ~= "Instance" then return end
+    TRACE.conn = ev.OnClientEvent:Connect(function(gun, a, b)
         if not fl.tracer then return end
         local c = LP.Character; if not c then return end
-        if typeof(gun)~="Instance" or not gun:IsDescendantOf(c) then return end
-        local pa,pb = to_pos(a),to_pos(b)
-        if not (pa and pb) then
-            local cam = workspace.CurrentCamera; if not cam then return end
-            pa = pa or cam.CFrame.Position
-            pb = pb or (pa+cam.CFrame.LookVector*3000)
+        if typeof(gun) ~= "Instance" or not gun:IsDescendantOf(c) then return end
+
+        local handle = gun:FindFirstChild("Handle")
+        local handlePos = handle and handle.Position
+        local shot = WSH.lastShot
+        local recent = shot and (os.clock() - shot.time) < 0.5
+
+        local shotFrom   -- точка выстрела (может быть сдвинута wallbang)
+        local shotTo     -- реальная точка попадания
+        local visualFrom -- визуальный ствол (Handle)
+
+        if recent then
+            visualFrom = shot.handle
+            shotFrom   = shot.from
+            shotTo     = shot.to
+        else
+            visualFrom = handlePos
+            shotFrom   = handlePos
+            shotTo     = to_pos(b)
         end
-        local d = pb-pa; local dist = d.Magnitude
-        if dist<0.1 then return end
-        local p = Instance.new("Part")
-        p.Name="sBeam"; p.Anchored=true
-        p.CanCollide=false; p.CanQuery=false; p.CanTouch=false; p.CastShadow=false
-        p.Material=Enum.Material.Neon; p.Color=FC.tracer
-        p.Size=Vector3.new(SZ.tracer,SZ.tracer,dist)
-        p.CFrame=CFrame.lookAt(pa+d/2,pb)
-        p.Transparency=0.05; p.Parent=workspace
-        local li = Instance.new("PointLight",p)
-        li.Color=FC.tracer; li.Brightness=3; li.Range=10
-        local ts = 0
-        local cn
-        cn = RS.Heartbeat:Connect(function(dt)
-            ts=ts+dt; local k=ts/0.6
-            if k>=1 or not p.Parent then cn:Disconnect(); if p.Parent then p:Destroy() end; return end
-            p.Transparency=0.05+k*0.95; li.Brightness=3*(1-k)
-        end)
+
+        -- реальный hit из события — если он валидный, приоритетнее "нашей" цели
+        local bPos = to_pos(b)
+        local finalTo
+        if bPos and shotFrom then
+            local distFromShot = (bPos - shotFrom).Magnitude
+            if distFromShot > 0.5 and distFromShot < 5000 then
+                finalTo = bPos
+            end
+        end
+        finalTo = finalTo or shotTo or bPos
+
+        if not (visualFrom and shotFrom and finalTo) then return end
+
+        -- wallbang: shotFrom далеко от visualFrom → дорисовываем путь
+        local wasWb = (shotFrom - visualFrom).Magnitude > 2
+
+        -- ОСНОВНОЙ луч: от точки выстрела к реальной точке попадания
+        drawBeam(shotFrom, finalTo, FC.tracer, false)
+
+        -- ДОРИСОВКА: от ствола к точке выстрела (полупрозрачная)
+        if wasWb then
+            drawBeam(visualFrom, shotFrom, FC.tracer, true)
+        end
     end)
 end
 disableTracer_fn = function()
@@ -1100,9 +1191,6 @@ toggleFog = function(v)
     else L.FogEnd=1e6; L.FogStart=0 end
 end
 
--- ============================================================
--- ESP
--- ============================================================
 local function mkESP()
     if espC then return end
     espC = RS.Heartbeat:Connect(function()
@@ -1199,9 +1287,6 @@ local function updateRoleTags()
     end
 end
 
--- ============================================================
--- JUMP
--- ============================================================
 local function mkJump()
     if jumpC then jumpC:Disconnect() end
     local c=LP.Character; if not c then return end
@@ -1253,9 +1338,6 @@ local function mkJump()
 end
 local function clJump() if jumpC then jumpC:Disconnect(); jumpC=nil end end
 
--- ============================================================
--- KILL LIGHTNING + HOOKS
--- ============================================================
 local function killLightning(pos)
     local bm=Instance.new("Part")
     bm.Name="sKl"; bm.Size=Vector3.new(1.5,80,1.5)
@@ -1293,9 +1375,6 @@ hookKills = function()
     end
 end
 
--- ============================================================
--- MODEL (Headless + Fake Korblox)
--- ============================================================
 local function applyHeadless(char)
     local h = char:FindFirstChild("Head")
     if not h then return end
@@ -1307,7 +1386,6 @@ local function applyHeadless(char)
         local d = h:FindFirstChildOfClass("Decal"); if d then d.LocalTransparencyModifier = 0 end
     end
 end
-
 local korbloxParts = {}
 local function clearKorblox(char)
     if char then
@@ -1346,18 +1424,12 @@ local function applyKorblox(char)
     local k = Instance.new("Part")
     k.Name = "FakeKorblox"
     k.Size = Vector3.new(1, 2, 1)
-    k.CanCollide = false
-    k.CanQuery = false
-    k.CanTouch = false
-    k.Massless = true
-    k.Material = Enum.Material.Metal
-    k.Color = Color3.fromRGB(30, 30, 35)
-    k.Transparency = 1
+    k.CanCollide = false; k.CanQuery = false; k.CanTouch = false; k.Massless = true
+    k.Material = Enum.Material.Metal; k.Color = Color3.fromRGB(30, 30, 35)
     local mesh = Instance.new("SpecialMesh", k)
     mesh.MeshType = Enum.MeshType.FileMesh
     mesh.MeshId = "rbxassetid://902942096"
     mesh.TextureId = "rbxassetid://902843398"
-    mesh.Scale = Vector3.new(1, 1, 1)
     k.Parent = char
     local weld = Instance.new("Weld")
     weld.Part0 = attachTo
@@ -1369,16 +1441,9 @@ end
 local function applySkinAll()
     local c = LP.Character; if not c then return end
     applyHeadless(c)
-    if fl.korblox then
-        applyKorblox(c)
-    else
-        clearKorblox(c)
-    end
+    if fl.korblox then applyKorblox(c) else clearKorblox(c) end
 end
 
--- ============================================================
--- KILL ALL
--- ============================================================
 local function killAll()
     local c=LP.Character; if not c then notif("no character",false) return end
     local knife = c:FindFirstChild("Knife")
@@ -1414,9 +1479,6 @@ local function killAll()
     pcall(function() myp.CFrame=orig end)
 end
 
--- ============================================================
--- COLOR PICKER HELPER
--- ============================================================
 local function addVisual(tab, key, title, mkFn, clFn)
     tab:AddToggle(key, { Title = title, Default = false })
     Options[key]:OnChanged(function(v)
@@ -1428,23 +1490,16 @@ local function addVisual(tab, key, title, mkFn, clFn)
         FC[key] = c
         if fl[key] then
             clFn()
-            task.spawn(function()
-                task.wait(0.05)
-                mkFn()
-            end)
+            task.spawn(function() task.wait(0.05); mkFn() end)
         end
     end)
 end
 
 -- ============================================================
--- UI — COMBAT
+-- UI
 -- ============================================================
 Tabs.Combat:AddToggle("master", { Title = "★ MASTER AIM (auto)", Default = false })
-Options.master:OnChanged(function(v)
-    SA.master = v
-    if v then pcall(install_hooks) end
-    notif("Master Aim", v)
-end)
+Options.master:OnChanged(function(v) SA.master = v; if v then pcall(install_hooks) end; notif("Master Aim", v) end)
 Tabs.Combat:AddToggle("autoCfg", { Title = "Auto-Config (1s)", Default = true })
 Options.autoCfg:OnChanged(function(v) SA.auto = v end)
 Tabs.Combat:AddToggle("wbToggle", { Title = "WallBang", Default = true })
@@ -1471,9 +1526,6 @@ Options.autoGun:OnChanged(function(v)
     else grab_desc_stop() end
 end)
 
--- ============================================================
--- UI — MOVE
--- ============================================================
 Tabs.Move:AddToggle("wsOn", { Title = "Walkspeed", Default = false })
 Options.wsOn:OnChanged(function(v) MOVE.speedOn=v; applySpeed() end)
 Tabs.Move:AddSlider("wsVal", { Title = "Speed", Default = 50, Min = 1, Max = 500, Rounding = 0 })
@@ -1519,9 +1571,6 @@ Tabs.Move:AddButton({ Title = "TP to Lobby", Callback = function()
     end
 end })
 
--- ============================================================
--- UI — TROLL
--- ============================================================
 Tabs.Troll:AddButton({ Title = "Fling Nearest", Callback = function() flingNearest() end })
 Tabs.Troll:AddButton({ Title = "Fling All", Callback = function() flingAll() end })
 Tabs.Troll:AddButton({ Title = "Fling Murderer", Callback = function()
@@ -1554,9 +1603,6 @@ Tabs.Troll:AddButton({ Title = "TP to Sheriff", Callback = function()
     end
 end })
 
--- ============================================================
--- UI — VISUALS (all with colors)
--- ============================================================
 addVisual(Tabs.Visuals, "trail", "Neon Trail", mkTrail, clTrail)
 addVisual(Tabs.Visuals, "hat", "China Hat", mkHat, clHat)
 addVisual(Tabs.Visuals, "glow", "Body Glow", mkGlow, clGlow)
@@ -1569,29 +1615,17 @@ addVisual(Tabs.Visuals, "lightning", "Lightning Aura", mkLight, clLight)
 addVisual(Tabs.Visuals, "orbAura", "Orb Aura", mkOrb, clOrb)
 addVisual(Tabs.Visuals, "ghost", "Ghost Trail", mkGhost, clGhost)
 addVisual(Tabs.Visuals, "foot", "Footsteps", mkFoot, clFoot)
-addVisual(Tabs.Visuals, "tracer", "Bullet Tracer", function() task.spawn(connect_trace_fn) end, disableTracer_fn)
+addVisual(Tabs.Visuals, "tracer", "Bullet Tracer (real path)", function() task.spawn(connect_trace_fn) end, disableTracer_fn)
 Tabs.Visuals:AddToggle("heartSky", { Title = "Hearts (Sky)", Default = false })
 Options.heartSky:OnChanged(function(v) skyHeart = v; if fl.skyDust then clSky(); task.spawn(function() task.wait(0.05); mkSky() end) end end)
 Tabs.Visuals:AddToggle("heartBo", { Title = "Hearts (Bounce)", Default = false })
 Options.heartBo:OnChanged(function(v) boHeart = v; if fl.bounce then clBo(); task.spawn(function() task.wait(0.05); mkBo() end) end end)
 
--- ============================================================
--- UI — MODEL
--- ============================================================
 Tabs.Model:AddToggle("headless", { Title = "Headless", Default = false })
-Options.headless:OnChanged(function(v)
-    fl.headless = v
-    pcall(applySkinAll)
-end)
+Options.headless:OnChanged(function(v) fl.headless = v; pcall(applySkinAll) end)
 Tabs.Model:AddToggle("korblox", { Title = "Fake Korblox", Default = false })
-Options.korblox:OnChanged(function(v)
-    fl.korblox = v
-    pcall(applySkinAll)
-end)
+Options.korblox:OnChanged(function(v) fl.korblox = v; pcall(applySkinAll) end)
 
--- ============================================================
--- UI — JUMP
--- ============================================================
 Tabs.Jump:AddToggle("jumpOn", { Title = "Jump Circles", Default = false })
 Options.jumpOn:OnChanged(function(v) fl.jump=v; if v then mkJump() else clJump() end end)
 Tabs.Jump:AddColorpicker("jumpColor", { Title = "Jump Color", Default = FC.jump })
@@ -1601,9 +1635,6 @@ Tabs.Jump:AddButton({ Title = "Double Ring", Callback = function() jStyle="Doubl
 Tabs.Jump:AddButton({ Title = "Triple Ripple", Callback = function() jStyle="Ripple" end })
 Tabs.Jump:AddButton({ Title = "Particle Burst", Callback = function() jStyle="Particles" end })
 
--- ============================================================
--- UI — WORLD
--- ============================================================
 addVisual(Tabs.World, "atmo", "Cyberpunk Atmo", mkAtmo, clAtmo)
 addVisual(Tabs.World, "bloom", "Bloom", mkBloom, clBloom)
 Tabs.World:AddToggle("fb", { Title = "FullBright", Default = false })
@@ -1617,9 +1648,6 @@ Tabs.World:AddButton({ Title = "Cyber", Callback = function() applyTime("Cyber")
 Tabs.World:AddToggle("fog", { Title = "Fog", Default = false })
 Options.fog:OnChanged(function(v) fl._fog=v; toggleFog(v) end)
 
--- ============================================================
--- UI — ESP
--- ============================================================
 Tabs.ESP:AddToggle("roleEsp", { Title = "Role ESP", Default = false })
 Options.roleEsp:OnChanged(function(v) fl.esp=v; if v then mkESP() else clESP() end end)
 Tabs.ESP:AddToggle("ghostEsp", { Title = "Ghost ESP", Default = true })
@@ -1630,9 +1658,6 @@ Options.roleTag:OnChanged(function(v)
     if not v then for pl in pairs(espTxtTags) do detachRoleTag(pl) end end
 end)
 
--- ============================================================
--- UI — EXTRA
--- ============================================================
 Tabs.Extra:AddToggle("killLightning", { Title = "Kill Lightning", Default = true })
 Options.killLightning:OnChanged(function(v) killOn=v end)
 Tabs.Extra:AddButton({ Title = "Clear Particles", Callback = function()
@@ -1640,7 +1665,7 @@ Tabs.Extra:AddButton({ Title = "Clear Particles", Callback = function()
         if p:IsA("ParticleEmitter") then p:Destroy() end
     end
 end })
-Tabs.Extra:AddParagraph({ Title = "StarWare Compact", Content = "Auto-Aim + Fixes + Korblox" })
+Tabs.Extra:AddParagraph({ Title = "StarWare Compact", Content = "Real tracer path · Fixed wallbang · Fallback aim" })
 
 -- ============================================================
 -- MAIN LOOP
@@ -1657,6 +1682,12 @@ ADDON.hb = RS.Heartbeat:Connect(function()
         if fl.roleTag and now - (ADDON.rtag_acc or 0) >= 0.25 then
             ADDON.rtag_acc = now
             pcall(updateRoleTags)
+        end
+        if WSH.wbAtt and WSH.wbUntil and now > WSH.wbUntil then
+            if WSH.wbAtt.Parent and WSH.wbOrigCF then
+                pcall(function() WSH.wbAtt.CFrame = WSH.wbOrigCF end)
+            end
+            WSH.wbAtt = nil; WSH.wbOrigCF = nil; WSH.wbUntil = nil
         end
         if now - (ADDON.hook_acc or 0) >= 1 then
             ADDON.hook_acc = now
@@ -1705,9 +1736,6 @@ task.spawn(function()
     if MOVE.spin then startSpin() end
 end)
 
--- ============================================================
--- SAVE MANAGER
--- ============================================================
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
 SaveManager:IgnoreThemeSettings()
@@ -1717,11 +1745,8 @@ InterfaceManager:BuildInterfaceSection(Tabs.Extra)
 SaveManager:BuildConfigSection(Tabs.Extra)
 SaveManager:LoadAutoloadConfig()
 
-Fluent:Notify({ Title = "StarWare Compact", Content = "Loaded · All features active", Duration = 3 })
+Fluent:Notify({ Title = "StarWare Compact", Content = "Loaded · Real tracer path", Duration = 3 })
 
--- ============================================================
--- UNLOAD
--- ============================================================
 ADDON.unload = function()
     ADDON.loaded = false
     SA.master=false; KS.enabled=false; KA.on=false
@@ -1739,6 +1764,9 @@ ADDON.unload = function()
     pcall(clearKorblox, LP.Character)
     for pl in pairs(espTxtTags) do detachRoleTag(pl) end
     pcall(function() if fl._fog then toggleFog(false) end end)
+    if WSH.wbAtt and WSH.wbOrigCF and WSH.wbAtt.Parent then
+        pcall(function() WSH.wbAtt.CFrame = WSH.wbOrigCF end)
+    end
     local m = WSH.m
     if m then
         pcall(function() setreadonly(m,false) end)
