@@ -1,13 +1,60 @@
 --!nocheck
 --!nolint
 -- ============================================================
---  STARWARE × LUMEN UI (Mobile Fixed + All Features)
+--  STARWARE × LUMEN UI (Mobile Fixed + Custom Notifications)
 -- ============================================================
 if getgenv().UN_ADDON and getgenv().UN_ADDON.loaded then
     pcall(function() getgenv().UN_ADDON.unload() end)
 end
 local ADDON = { loaded = true }
 getgenv().UN_ADDON = ADDON
+
+-- ============================================================
+-- CUSTOM NOTIFICATION (Bottom Left)
+-- ============================================================
+local function customNotif(text)
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "StarWareNotif"
+    sg.ResetOnSpawn = false
+    sg.DisplayOrder = 1000001
+    sg.Parent = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 220, 0, 50)
+    frame.Position = UDim2.new(0, 20, 1, -70) -- Левый нижний угол
+    frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    frame.BorderSizePixel = 0
+    frame.BackgroundTransparency = 1
+    frame.Parent = sg
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
+
+    local stroke = Instance.new("UIStroke", frame)
+    stroke.Color = Color3.fromRGB(0, 120, 212)
+    stroke.Transparency = 1
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextTransparency = 1
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 14
+    label.Parent = frame
+
+    local Tween = game:GetService("TweenService")
+    Tween:Create(frame, TweenInfo.new(0.4), {BackgroundTransparency = 0.2}):Play()
+    Tween:Create(stroke, TweenInfo.new(0.4), {Transparency = 0}):Play()
+    Tween:Create(label, TweenInfo.new(0.4), {TextTransparency = 0}):Play()
+
+    task.delay(3.5, function()
+        Tween:Create(frame, TweenInfo.new(0.4), {BackgroundTransparency = 1}):Play()
+        Tween:Create(stroke, TweenInfo.new(0.4), {Transparency = 1}):Play()
+        Tween:Create(label, TweenInfo.new(0.4), {TextTransparency = 1}):Play()
+        task.wait(0.5)
+        sg:Destroy()
+    end)
+end
 
 -- ============================================================
 -- LUMEN UI INITIALIZATION
@@ -17,11 +64,7 @@ local success, Lumen = pcall(function()
 end)
 
 if not success or not Lumen then
-    game:GetService("StarterGui"):SetCore("SendNotification", {
-        Title = "Ошибка",
-        Text = "Не удалось загрузить Lumen UI. Проверь интернет или executor.",
-        Duration = 5
-    })
+    customNotif("Ошибка загрузки Lumen UI")
     return
 end
 
@@ -30,14 +73,17 @@ Lumen:LoadingScreen({ Title = "StarWare"; Subtitle = "Initializing…"; Duration
 Lumen.SetWatermark("StarWare", true)
 Lumen.SetKeybindList(true)
 
--- ВНИМАНИЕ: убираем параметр Size, чтобы Lumen не крашился
 local Window = Lumen:Window({
     Title = "StarWare";
     Footer = "Auto-Aim Edition";
 })
 
+-- Попытка открыть меню сразу
+pcall(function() Window:Open() end)
+pcall(function() Window:Toggle() end)
+
 -- ============================================================
--- MOBILE TOGGLE BUTTON (Fixed)
+-- MOBILE TOGGLE BUTTON
 -- ============================================================
 local Players = game:GetService("Players")
 local LP = Players.LocalPlayer
@@ -87,16 +133,16 @@ game:GetService("UserInputService").InputChanged:Connect(function(input)
     end
 end)
 
--- Имитация RightShift для открытия Lumen
-local VIM = game:GetService("VirtualInputManager")
+-- Прямое открытие меню
 btn.MouseButton1Click:Connect(function()
     local ok = pcall(function()
-        VIM:SendKeyEvent(true, Enum.KeyCode.RightShift, false, game)
-        task.wait(0.05)
-        VIM:SendKeyEvent(false, Enum.KeyCode.RightShift, false, game)
+        Window:Toggle()
     end)
     if not ok then
-        pcall(function() Window.Enabled = not Window.Enabled end)
+        -- Резервный метод, если Toggle не сработал
+        local coreGui = game:GetService("CoreGui")
+        local gui = coreGui:FindFirstChild("Lumen") or PG:FindFirstChild("Lumen")
+        if gui then gui.Enabled = not gui.Enabled end
     end
 end)
 
@@ -419,7 +465,7 @@ local function resolve()
     local handle = gun and gun:FindFirstChild("Handle")
     local handlePos = handle and handle.Position or muzzle
     
-    -- Фикс Wallbang: держим ствол сдвинутым 350мс
+    -- Wallbang фикс: держим ствол сдвинутым 350мс
     if SA.wb and att and muzzle and rayBlocked(muzzle, root.Position, {c, myChar}) and not anyVisible(c, muzzle) then
         local wbSpot = findWbSpot(root, muzzle, SA.wbDist)
         if wbSpot then
@@ -1952,6 +1998,9 @@ end)
 -- CONFIG PAGE
 -- ============================================================
 Lumen:BuildConfigPage(Window)
+
+-- Показываем кастомное уведомление о загрузке
+customNotif("Скрипт успешно загружен!")
 
 Lumen.Notify({ Title = "StarWare"; Text = "Loaded successfully"; Type = "Success"; Duration = 3 })
 print("[StarWare × Lumen] ready")
