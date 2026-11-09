@@ -1,7 +1,7 @@
 --!nocheck
 --!nolint
 -- ============================================================
---  STARWARE FLUENT — Compact + Fixed wallbang/aim/tracer
+--  STARWARE × LUMEN
 -- ============================================================
 if getgenv().UN_ADDON and getgenv().UN_ADDON.loaded then
     pcall(function() getgenv().UN_ADDON.unload() end)
@@ -9,33 +9,24 @@ end
 local ADDON = { loaded = true }
 getgenv().UN_ADDON = ADDON
 
-local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
-local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
-local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+-- ============================================================
+-- LUMEN UI LIBRARY
+-- ============================================================
+local Lumen = loadstring(game:HttpGet("https://raw.githubusercontent.com/chromatiks/Lumen/main/Library.lua"))()
 
-local Window = Fluent:CreateWindow({
-    Title = "StarWare",
-    SubTitle = "Compact · Fixed",
-    TabWidth = 140,
-    Size = UDim2.fromOffset(520, 420),
-    Acrylic = true,
-    Theme = "Dark",
-    MinimizeKey = Enum.KeyCode.LeftControl
+Lumen.SetConfigFolder("StarWare")
+Lumen:LoadingScreen({ Title = "StarWare"; Subtitle = "Loading…"; Duration = 1.25 })
+Lumen.SetWatermark("StarWare", true)
+Lumen.SetKeybindList(true)
+
+local Window = Lumen:Window({
+    Title = "StarWare";
+    Footer = "Auto-Aim Edition";
 })
 
-local Tabs = {
-    Combat  = Window:AddTab({ Title = "Combat",  Icon = "crosshair" }),
-    Move    = Window:AddTab({ Title = "Move",    Icon = "move" }),
-    Troll   = Window:AddTab({ Title = "Troll",   Icon = "smile" }),
-    Visuals = Window:AddTab({ Title = "Visuals", Icon = "eye" }),
-    Model   = Window:AddTab({ Title = "Model",   Icon = "user" }),
-    Jump    = Window:AddTab({ Title = "Jump",    Icon = "arrow-up" }),
-    World   = Window:AddTab({ Title = "World",   Icon = "globe" }),
-    ESP     = Window:AddTab({ Title = "ESP",     Icon = "scan" }),
-    Extra   = Window:AddTab({ Title = "Extra",   Icon = "settings" }),
-}
-local Options = Fluent.Options
-
+-- ============================================================
+-- SERVICES
+-- ============================================================
 local Players    = game:GetService("Players")
 local RS         = game:GetService("RunService")
 local Replicated = game:GetService("ReplicatedStorage")
@@ -45,32 +36,43 @@ local L          = game:GetService("Lighting")
 local LP         = Players.LocalPlayer
 local Cam        = workspace.CurrentCamera
 
-local SA = { master=false, auto=true, predMs=100, part="Torso", wb=true, wbDist=30, ping=100, jitter=0, targetDist=0 }
+-- ============================================================
+-- STATE
+-- ============================================================
+local SA = {
+    master = false, auto = true, predMs = 100, part = "Torso",
+    wb = true, wbDist = 30, ping = 100, jitter = 0, targetDist = 0
+}
 local SA_hist = {}
 local pingHistory = {}
-local KS = { enabled=false }
-local KA = { on=false, dist=30, last=0 }
-local TRACE = { on=false, conn=nil }
+local KS = { enabled = false }
+local KA = { on = false, dist = 30, last = 0 }
+local TRACE = { on = false, conn = nil }
 local autograb_on = false
 local grab_round_mod = nil
 local grab_desc_conn = nil
 
-local MOVE = { speedOn=false, speed=50, jumpOn=false, jump=50,
-    infJump=false, noclip=false, fly=false, flySpeed=60, fg=nil, fv=nil,
-    gravOn=false, grav=196.2, spin=false, spinSpeed=720 }
-local moveConns = { infJump=nil, noclip=nil, nc={} }
+local MOVE = {
+    speedOn = false, speed = 50, jumpOn = false, jump = 50,
+    infJump = false, noclip = false, fly = false, flySpeed = 60, fg = nil, fv = nil,
+    gravOn = false, grav = 196.2, spin = false, spinSpeed = 720
+}
+local moveConns = { infJump = nil, noclip = nil, nc = {} }
 local flyConn, spinConn
 
-local TROLL = { flinging=false }
+local TROLL = { flinging = false }
 
-local fl = { trail=false, parts=false, hat=false, foot=false, rainbow=false,
-    esp=false, espGhost=true, tracer=false, atmo=false, jump=false,
-    bounce=false, lightning=false, orbAura=false, glow=false,
-    snow=false, ghost=false, skyDust=false, bloom=false, fb=false,
-    sky=false, _fog=false, headless=false, korblox=false, roleTag=false }
+local fl = {
+    trail = false, parts = false, hat = false, foot = false, rainbow = false,
+    esp = false, espGhost = true, tracer = false, atmo = false, jump = false,
+    bounce = false, lightning = false, orbAura = false, glow = false,
+    snow = false, ghost = false, skyDust = false, bloom = false, fb = false,
+    sky = false, _fog = false, headless = false, korblox = false, roleTag = false
+}
 
 local FC = {}
 for k in pairs(fl) do FC[k] = Color3.fromRGB(0, 120, 212) end
+
 local SZ = { trail=1.5, parts=1.6, hat=1.4, foot=2.2, jump=4, bounce=0.5,
     orbAura=2.5, lightning=0.7, snow=1.2, glow=0.3, tracer=0.15,
     esp=0.5, ghost=0.3, atmo=0.35, rainbow=0.4, skyDust=1.5, bloom=1.4 }
@@ -89,8 +91,12 @@ local startInfJump, stopInfJump, startNoclip, stopNoclip
 local startFly, stopFly, startSpin, stopSpin, moveReset
 local applyTime, toggleFog, ka_tick, hookKills
 
+-- ============================================================
+-- HELPERS
+-- ============================================================
 local function notif(txt, on)
-    Fluent:Notify({ Title = "StarWare", Content = tostring(txt), SubContent = on and "ON" or "OFF", Duration = 2 })
+    Lumen.Notify({ Title = "StarWare", Text = tostring(txt) .. (on ~= nil and (on and " · ON" or " · OFF") or ""),
+        Type = on == false and "Warning" or "Success", Duration = 2 })
 end
 local function hum() local c=LP.Character; return c and c:FindFirstChildOfClass("Humanoid") end
 local function HRP() local c=LP.Character; return c and c:FindFirstChild("HumanoidRootPart") end
@@ -139,6 +145,9 @@ local function cachedRole(pl)
     return getRole(pl)
 end
 
+-- ============================================================
+-- TARGETING
+-- ============================================================
 local rp = RaycastParams.new()
 rp.FilterType = Enum.RaycastFilterType.Exclude
 local function refresh_target()
@@ -180,6 +189,9 @@ nearest_player = function()
     return best
 end
 
+-- ============================================================
+-- PING + AUTO-CONFIG
+-- ============================================================
 local function getPing()
     local ok, ms = pcall(function() return Stats.Network.ServerStatsItem["Data Ping"]:GetValue() end)
     return (ok and type(ms)=="number" and ms>0) and ms or 100
@@ -214,6 +226,9 @@ task.spawn(function()
     while ADDON.loaded do task.wait(1); pcall(updateAutoConfig) end
 end)
 
+-- ============================================================
+-- VELOCITY HISTORY
+-- ============================================================
 task.spawn(function()
     while ADDON.loaded do
         task.wait(0.05)
@@ -241,6 +256,9 @@ local function getVelocity(root)
     return (b[2]-a[2]) / dt
 end
 
+-- ============================================================
+-- WALLBANG HELPERS
+-- ============================================================
 local function rayBlocked(a,b,ignore)
     local list = { workspace.CurrentCamera }
     for _, x in ipairs(ignore or {}) do table.insert(list, x) end
@@ -287,6 +305,9 @@ local function findWbSpot(mRoot, muzzle, maxDist)
     end
 end
 
+-- ============================================================
+-- WEAPON HOOK
+-- ============================================================
 local WSH = {}
 get_ws_fn = function()
     if WSH.m then return WSH.m end
@@ -327,11 +348,10 @@ local function resolve()
     local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
     local att = myRoot and myRoot:FindFirstChild("GunRaycastAttachment")
     local muzzle = att and att.WorldPosition or (myRoot and myRoot.Position)
-    -- visual handle pos для трасера
     local gun = myChar and myChar:FindFirstChild("Gun")
     local handle = gun and gun:FindFirstChild("Handle")
     local handlePos = handle and handle.Position or muzzle
-    -- FIX: keep attachment moved for 350ms
+    -- FIX 1: 350ms hold for wallbang
     if SA.wb and att and muzzle and rayBlocked(muzzle, root.Position, {c, myChar}) and not anyVisible(c, muzzle) then
         local wbSpot = findWbSpot(root, muzzle, SA.wbDist)
         if wbSpot then
@@ -363,11 +383,10 @@ local function resolve()
         end
     end
     result = result or fallback or (root.Position + off)
-    -- FIX: сохраняем реальный путь выстрела для трасера
     WSH.lastShot = {
-        handle = handlePos,   -- визуальный ствол
-        from   = muzzle,      -- точка выстрела (после wallbang)
-        to     = result,      -- цель (куда стреляем)
+        handle = handlePos,
+        from   = muzzle,
+        to     = result,
         time   = os.clock(),
     }
     return result
@@ -409,6 +428,7 @@ getgenv().KNIFE_AIM_RESOLVE = function()
     return CFrame.new(part.Position + vel)
 end
 
+-- FIX 2: fallback for no shift-lock
 local function findGunRemote(gun)
     local kl = gun:FindFirstChild("KnifeLocal")
     local cb = kl and kl:FindFirstChild("CreateBeam")
@@ -453,6 +473,9 @@ task.spawn(function()
     end
 end)
 
+-- ============================================================
+-- KILL AURA
+-- ============================================================
 ka_tick = function()
     if not KA.on then return end
     local c = LP.Character; if not c then return end
@@ -487,6 +510,9 @@ ka_tick = function()
     if fired then KA.last = now end
 end
 
+-- ============================================================
+-- AUTO GUN
+-- ============================================================
 local function grab_has_role()
     if not grab_round_mod then
         local ok,m = pcall(function() return require(Replicated:WaitForChild("Modules"):WaitForChild("CurrentRoundClient")) end)
@@ -526,7 +552,7 @@ local function grab_desc_stop()
 end
 
 -- ============================================================
--- TRACER — FIXED: реальная линия выстрела
+-- TRACER (real path)
 -- ============================================================
 local function to_pos(v)
     if typeof(v)=="Vector3" then return v end
@@ -536,7 +562,6 @@ local function to_pos(v)
         if v:IsA("BasePart") then return v.Position end
     end
 end
-
 local function drawBeam(from, to, color, dim)
     local d = to - from
     local dist = d.Magnitude
@@ -563,7 +588,6 @@ local function drawBeam(from, to, color, dim)
         li.Brightness = startB*(1-k)
     end)
 end
-
 enableTracer_fn = function()
     if TRACE.conn then return end
     local m = get_ws_fn()
@@ -573,16 +597,11 @@ enableTracer_fn = function()
         if not fl.tracer then return end
         local c = LP.Character; if not c then return end
         if typeof(gun) ~= "Instance" or not gun:IsDescendantOf(c) then return end
-
         local handle = gun:FindFirstChild("Handle")
         local handlePos = handle and handle.Position
         local shot = WSH.lastShot
         local recent = shot and (os.clock() - shot.time) < 0.5
-
-        local shotFrom   -- точка выстрела (может быть сдвинута wallbang)
-        local shotTo     -- реальная точка попадания
-        local visualFrom -- визуальный ствол (Handle)
-
+        local shotFrom, shotTo, visualFrom
         if recent then
             visualFrom = shot.handle
             shotFrom   = shot.from
@@ -592,8 +611,6 @@ enableTracer_fn = function()
             shotFrom   = handlePos
             shotTo     = to_pos(b)
         end
-
-        -- реальный hit из события — если он валидный, приоритетнее "нашей" цели
         local bPos = to_pos(b)
         local finalTo
         if bPos and shotFrom then
@@ -603,19 +620,10 @@ enableTracer_fn = function()
             end
         end
         finalTo = finalTo or shotTo or bPos
-
         if not (visualFrom and shotFrom and finalTo) then return end
-
-        -- wallbang: shotFrom далеко от visualFrom → дорисовываем путь
         local wasWb = (shotFrom - visualFrom).Magnitude > 2
-
-        -- ОСНОВНОЙ луч: от точки выстрела к реальной точке попадания
         drawBeam(shotFrom, finalTo, FC.tracer, false)
-
-        -- ДОРИСОВКА: от ствола к точке выстрела (полупрозрачная)
-        if wasWb then
-            drawBeam(visualFrom, shotFrom, FC.tracer, true)
-        end
+        if wasWb then drawBeam(visualFrom, shotFrom, FC.tracer, true) end
     end)
 end
 disableTracer_fn = function()
@@ -1191,6 +1199,9 @@ toggleFog = function(v)
     else L.FogEnd=1e6; L.FogStart=0 end
 end
 
+-- ============================================================
+-- ESP
+-- ============================================================
 local function mkESP()
     if espC then return end
     espC = RS.Heartbeat:Connect(function()
@@ -1287,6 +1298,9 @@ local function updateRoleTags()
     end
 end
 
+-- ============================================================
+-- JUMP
+-- ============================================================
 local function mkJump()
     if jumpC then jumpC:Disconnect() end
     local c=LP.Character; if not c then return end
@@ -1338,6 +1352,9 @@ local function mkJump()
 end
 local function clJump() if jumpC then jumpC:Disconnect(); jumpC=nil end end
 
+-- ============================================================
+-- KILL LIGHTNING
+-- ============================================================
 local function killLightning(pos)
     local bm=Instance.new("Part")
     bm.Name="sKl"; bm.Size=Vector3.new(1.5,80,1.5)
@@ -1375,6 +1392,9 @@ hookKills = function()
     end
 end
 
+-- ============================================================
+-- MODEL (Headless + Korblox)
+-- ============================================================
 local function applyHeadless(char)
     local h = char:FindFirstChild("Head")
     if not h then return end
@@ -1407,36 +1427,26 @@ local function applyKorblox(char)
     local isR6 = char:FindFirstChild("Right Leg") ~= nil
     local attachTo, hideList
     if isR6 then
-        attachTo = char:FindFirstChild("Right Leg")
-        hideList = { "Right Leg" }
+        attachTo = char:FindFirstChild("Right Leg"); hideList = { "Right Leg" }
     else
-        attachTo = char:FindFirstChild("RightUpperLeg")
-        hideList = { "RightUpperLeg", "RightLowerLeg", "RightFoot" }
+        attachTo = char:FindFirstChild("RightUpperLeg"); hideList = { "RightUpperLeg", "RightLowerLeg", "RightFoot" }
     end
     if not attachTo then return end
     for _, n in ipairs(hideList) do
         local p = char:FindFirstChild(n)
-        if p then
-            p.LocalTransparencyModifier = 1
-            table.insert(korbloxParts, p)
-        end
+        if p then p.LocalTransparencyModifier = 1; table.insert(korbloxParts, p) end
     end
     local k = Instance.new("Part")
-    k.Name = "FakeKorblox"
-    k.Size = Vector3.new(1, 2, 1)
-    k.CanCollide = false; k.CanQuery = false; k.CanTouch = false; k.Massless = true
-    k.Material = Enum.Material.Metal; k.Color = Color3.fromRGB(30, 30, 35)
+    k.Name = "FakeKorblox"; k.Size = Vector3.new(1, 2, 1)
+    k.CanCollide=false; k.CanQuery=false; k.CanTouch=false; k.Massless=true
+    k.Material=Enum.Material.Metal; k.Color=Color3.fromRGB(30,30,35)
     local mesh = Instance.new("SpecialMesh", k)
     mesh.MeshType = Enum.MeshType.FileMesh
-    mesh.MeshId = "rbxassetid://902942096"
-    mesh.TextureId = "rbxassetid://902843398"
+    mesh.MeshId = "rbxassetid://902942096"; mesh.TextureId = "rbxassetid://902843398"
     k.Parent = char
-    local weld = Instance.new("Weld")
-    weld.Part0 = attachTo
-    weld.Part1 = k
+    local weld = Instance.new("Weld"); weld.Part0 = attachTo; weld.Part1 = k
     weld.C0 = CFrame.new(0, -attachTo.Size.Y/2 - 1.2, 0) * CFrame.Angles(0, math.rad(90), 0)
-    weld.Parent = k
-    table.insert(korbloxParts, k)
+    weld.Parent = k; table.insert(korbloxParts, k)
 end
 local function applySkinAll()
     local c = LP.Character; if not c then return end
@@ -1444,8 +1454,11 @@ local function applySkinAll()
     if fl.korblox then applyKorblox(c) else clearKorblox(c) end
 end
 
+-- ============================================================
+-- KILL ALL
+-- ============================================================
 local function killAll()
-    local c=LP.Character; if not c then notif("no character",false) return end
+    local c=LP.Character; if not c then notif("No character", false) return end
     local knife = c:FindFirstChild("Knife")
     if not knife then
         local bp = LP:FindFirstChildOfClass("Backpack")
@@ -1456,11 +1469,11 @@ local function killAll()
             task.wait(0.3); knife = c:FindFirstChild("Knife")
         end
     end
-    if not knife then notif("need knife",false) return end
+    if not knife then notif("You need the knife", false) return end
     local events = knife:FindFirstChild("Events")
     local stabbed = events and events:FindFirstChild("KnifeStabbed")
     local touched = events and events:FindFirstChild("HandleTouched")
-    if not stabbed or not touched then notif("no knife events",false) return end
+    if not stabbed or not touched then notif("No knife events", false) return end
     local myp = c:FindFirstChild("HumanoidRootPart"); if not myp then return end
     local orig = myp.CFrame
     for _,plr in ipairs(Players:GetPlayers()) do
@@ -1479,112 +1492,171 @@ local function killAll()
     pcall(function() myp.CFrame=orig end)
 end
 
-local function addVisual(tab, key, title, mkFn, clFn)
-    tab:AddToggle(key, { Title = title, Default = false })
-    Options[key]:OnChanged(function(v)
-        fl[key] = v
-        if v then mkFn() else clFn() end
-    end)
-    tab:AddColorpicker(key.."C", { Title = title.." Color", Default = FC[key] })
-    Options[key.."C"]:OnChanged(function(c)
-        FC[key] = c
-        if fl[key] then
-            clFn()
-            task.spawn(function() task.wait(0.05); mkFn() end)
-        end
-    end)
-end
+-- ============================================================
+-- PAGES & SUBPAGES
+-- ============================================================
+local Combat  = Window:Page({ Icon = "swords" })
+local Move    = Window:Page({ Icon = "move" })
+local Troll   = Window:Page({ Icon = "smile" })
+local Visuals = Window:Page({ Icon = "eye" })
+local Model   = Window:Page({ Icon = "user" })
+local Jump    = Window:Page({ Icon = "arrow-up" })
+local World   = Window:Page({ Icon = "globe" })
+local ESP     = Window:Page({ Icon = "scan" })
+local Extra   = Window:Page({ Icon = "settings" })
+
+local AimbotPage = Combat:SubPage({ Name = "Aimbot" })
+local MovementPage = Move:SubPage({ Name = "Movement" })
+local CharacterPage = Visuals:SubPage({ Name = "Character" })
+local ParticlesPage = Visuals:SubPage({ Name = "Particles" })
 
 -- ============================================================
--- UI
+-- COMBAT → AIMBOT
 -- ============================================================
-Tabs.Combat:AddToggle("master", { Title = "★ MASTER AIM (auto)", Default = false })
-Options.master:OnChanged(function(v) SA.master = v; if v then pcall(install_hooks) end; notif("Master Aim", v) end)
-Tabs.Combat:AddToggle("autoCfg", { Title = "Auto-Config (1s)", Default = true })
-Options.autoCfg:OnChanged(function(v) SA.auto = v end)
-Tabs.Combat:AddToggle("wbToggle", { Title = "WallBang", Default = true })
-Options.wbToggle:OnChanged(function(v) SA.wb = v end)
-Tabs.Combat:AddSlider("pred", { Title = "Prediction (ms)", Default = 100, Min = 0, Max = 700, Rounding = 1 })
-Options.pred:OnChanged(function(v) SA.predMs = v; SA.auto = false end)
-Tabs.Combat:AddButton({ Title = "Aim Part: Torso", Callback = function()
-    SA.part = SA.part == "Torso" and "Head" or "Torso"
-    notif("Aim Part: "..SA.part, true)
+local AimMain = AimbotPage:Section({ Name = "Main"; Side = "Left"; Icon = "crosshair" })
+local AimAdv  = AimbotPage:Section({ Name = "Advanced"; Side = "Left"; Icon = "sliders" })
+local AimSec  = AimbotPage:Section({ Name = "Kill Aura"; Side = "Right"; Icon = "target" })
+local AimGun  = AimbotPage:Section({ Name = "Gun"; Side = "Right"; Icon = "crosshair" })
+
+local MasterAim = AimMain:Label({ Text = "Master Aim" })
+MasterAim:Toggle({ State = false; Flag = "MasterAim"; Callback = function(v)
+    SA.master = v
+    if v then pcall(install_hooks) end
+    notif("Master Aim", v)
 end })
-Tabs.Combat:AddToggle("knifeSilent", { Title = "Knife Silent", Default = false })
-Options.knifeSilent:OnChanged(function(v) KS.enabled = v end)
-Tabs.Combat:AddToggle("killAura", { Title = "Kill Aura", Default = false })
-Options.killAura:OnChanged(function(v) KA.on = v end)
-Tabs.Combat:AddSlider("kaRad", { Title = "KA Radius", Default = 30, Min = 5, Max = 150, Rounding = 0 })
-Options.kaRad:OnChanged(function(v) KA.dist = v end)
-Tabs.Combat:AddButton({ Title = "Kill All", Callback = function() task.spawn(killAll) end })
-Tabs.Combat:AddToggle("autoGun", { Title = "Auto Gun", Default = false })
-Options.autoGun:OnChanged(function(v)
+
+local AutoCfg = AimMain:Label({ Text = "Auto Configuration" })
+AutoCfg:Toggle({ State = true; Flag = "AutoConfig"; Callback = function(v) SA.auto = v end })
+
+local AimPart = AimMain:Dropdown({
+    Name = "Aim Target";
+    Options = { "Torso", "Head" };
+    Value = "Torso";
+    Flag = "AimPart";
+    Callback = function(v) SA.part = v end
+})
+
+local WB = AimAdv:Label({ Text = "Wallbang" })
+WB:Toggle({ State = true; Flag = "Wallbang"; Callback = function(v) SA.wb = v end })
+
+AimAdv:Slider({ Name = "Prediction"; Suffix = " ms"; Value = 100; Min = 0; Max = 700; Increment = 5;
+    Flag = "Prediction"; Callback = function(v) SA.predMs = v; SA.auto = false end })
+
+local KnifeSilent = AimAdv:Label({ Text = "Knife Silent" })
+KnifeSilent:Toggle({ State = false; Flag = "KnifeSilent"; Callback = function(v) KS.enabled = v end })
+
+local KillAuraT = AimSec:Label({ Text = "Kill Aura" })
+KillAuraT:Toggle({ State = false; Flag = "KillAura"; Callback = function(v) KA.on = v end })
+
+AimSec:Slider({ Name = "Kill Aura Radius"; Suffix = " studs"; Value = 30; Min = 5; Max = 150; Increment = 1;
+    Flag = "KillAuraRadius"; Callback = function(v) KA.dist = v end })
+
+AimSec:Button({ Name = "Kill All"; Callback = function() task.spawn(killAll) end })
+
+local AutoGun = AimGun:Label({ Text = "Auto Grab Gun" })
+AutoGun:Toggle({ State = false; Flag = "AutoGun"; Callback = function(v)
     autograb_on = v
     if v then
         if not grab_desc_conn then grab_desc_conn = workspace.DescendantAdded:Connect(grab_desc_added) end
         task.spawn(scan_guns)
     else grab_desc_stop() end
-end)
+end })
 
-Tabs.Move:AddToggle("wsOn", { Title = "Walkspeed", Default = false })
-Options.wsOn:OnChanged(function(v) MOVE.speedOn=v; applySpeed() end)
-Tabs.Move:AddSlider("wsVal", { Title = "Speed", Default = 50, Min = 1, Max = 500, Rounding = 0 })
-Options.wsVal:OnChanged(function(v) MOVE.speed=v; applySpeed() end)
-Tabs.Move:AddToggle("jpOn", { Title = "JumpPower", Default = false })
-Options.jpOn:OnChanged(function(v) MOVE.jumpOn=v; applyJump() end)
-Tabs.Move:AddSlider("jpVal", { Title = "Power", Default = 50, Min = 1, Max = 500, Rounding = 0 })
-Options.jpVal:OnChanged(function(v) MOVE.jump=v; applyJump() end)
-Tabs.Move:AddToggle("infJ", { Title = "Infinite Jump", Default = false })
-Options.infJ:OnChanged(function(v) MOVE.infJump=v; if v then startInfJump() else stopInfJump() end end)
-Tabs.Move:AddToggle("noclip", { Title = "Noclip", Default = false })
-Options.noclip:OnChanged(function(v) MOVE.noclip=v; if v then startNoclip() else stopNoclip() end end)
-Tabs.Move:AddToggle("fly", { Title = "Fly", Default = false })
-Options.fly:OnChanged(function(v) MOVE.fly=v; if v then startFly() else stopFly() end end)
-Tabs.Move:AddSlider("flySp", { Title = "FlySpeed", Default = 60, Min = 5, Max = 500, Rounding = 0 })
-Options.flySp:OnChanged(function(v) MOVE.flySpeed=v end)
-Tabs.Move:AddToggle("spin", { Title = "Spin", Default = false })
-Options.spin:OnChanged(function(v) MOVE.spin=v; if v then startSpin() else stopSpin() end end)
-Tabs.Move:AddSlider("spinSp", { Title = "SpinSpeed", Default = 720, Min = 30, Max = 3000, Rounding = 0 })
-Options.spinSp:OnChanged(function(v) MOVE.spinSpeed=v end)
-Tabs.Move:AddToggle("gravOn", { Title = "Custom Gravity", Default = false })
-Options.gravOn:OnChanged(function(v) MOVE.gravOn=v; applyGrav() end)
-Tabs.Move:AddSlider("gravVal", { Title = "Gravity", Default = 196, Min = 0, Max = 1000, Rounding = 0 })
-Options.gravVal:OnChanged(function(v) MOVE.grav=v; applyGrav() end)
-Tabs.Move:AddButton({ Title = "Reset Move", Callback = function() moveReset() end })
-Tabs.Move:AddButton({ Title = "TP to Map", Callback = function()
+-- ============================================================
+-- MOVE → MOVEMENT
+-- ============================================================
+local WalkSec = MovementPage:Section({ Name = "Walk"; Side = "Left"; Icon = "user" })
+local FlightSec = MovementPage:Section({ Name = "Flight"; Side = "Right"; Icon = "move" })
+local WorldSec = MovementPage:Section({ Name = "World"; Side = "Right"; Icon = "globe" })
+
+local WST = WalkSec:Label({ Text = "Walkspeed" })
+WST:Toggle({ State = false; Flag = "Walkspeed"; Callback = function(v) MOVE.speedOn = v; applySpeed() end })
+WalkSec:Slider({ Name = "Speed"; Suffix = " studs"; Value = 50; Min = 16; Max = 500; Increment = 1;
+    Flag = "SpeedValue"; Callback = function(v) MOVE.speed = v; applySpeed() end })
+
+local JP = WalkSec:Label({ Text = "Jump Power" })
+JP:Toggle({ State = false; Flag = "JumpPower"; Callback = function(v) MOVE.jumpOn = v; applyJump() end })
+WalkSec:Slider({ Name = "Power"; Value = 50; Min = 50; Max = 500; Increment = 1;
+    Flag = "JumpPowerValue"; Callback = function(v) MOVE.jump = v; applyJump() end })
+
+local InfJ = WalkSec:Label({ Text = "Infinite Jump" })
+InfJ:Toggle({ State = false; Flag = "InfiniteJump"; Callback = function(v)
+    MOVE.infJump = v
+    if v then startInfJump() else stopInfJump() end
+end })
+
+local Fly = FlightSec:Label({ Text = "Fly" })
+Fly:Toggle({ State = false; Flag = "Fly"; Callback = function(v)
+    MOVE.fly = v
+    if v then startFly() else stopFly() end
+end })
+
+FlightSec:Slider({ Name = "Fly Speed"; Suffix = " studs"; Value = 60; Min = 5; Max = 500; Increment = 5;
+    Flag = "FlySpeed"; Callback = function(v) MOVE.flySpeed = v end })
+
+local NoclipT = FlightSec:Label({ Text = "Noclip" })
+NoclipT:Toggle({ State = false; Flag = "Noclip"; Callback = function(v)
+    MOVE.noclip = v
+    if v then startNoclip() else stopNoclip() end
+end })
+
+local SpinT = FlightSec:Label({ Text = "Spin" })
+SpinT:Toggle({ State = false; Flag = "Spin"; Callback = function(v)
+    MOVE.spin = v
+    if v then startSpin() else stopSpin() end
+end })
+
+FlightSec:Slider({ Name = "Spin Speed"; Suffix = " °/s"; Value = 720; Min = 30; Max = 3000; Increment = 30;
+    Flag = "SpinSpeed"; Callback = function(v) MOVE.spinSpeed = v end })
+
+local GravT = WorldSec:Label({ Text = "Custom Gravity" })
+GravT:Toggle({ State = false; Flag = "CustomGravity"; Callback = function(v) MOVE.gravOn = v; applyGrav() end })
+
+WorldSec:Slider({ Name = "Gravity"; Value = 196; Min = 0; Max = 1000; Increment = 4;
+    Flag = "GravityValue"; Callback = function(v) MOVE.grav = v; applyGrav() end })
+
+WalkSec:Button({ Name = "Reset Movement"; Callback = function() moveReset(); notif("Movement reset", true) end })
+WalkSec:Button({ Name = "Teleport to Map"; Callback = function()
     local hrp = HRP(); if not hrp then return end
     local best, bd = nil, math.huge
     for _,o in ipairs(workspace:GetDescendants()) do
         if o:IsA("SpawnLocation") and o.Parent and not string.find(tostring(o:GetFullName()), "Lobby") then
-            local d = (o.Position-hrp.Position).Magnitude
-            if d<bd then bd=d; best=o end
+            local d = (o.Position - hrp.Position).Magnitude
+            if d < bd then bd=d; best=o end
         end
     end
-    if best then hrp.CFrame=best.CFrame+Vector3.new(0,5,0) end
+    if best then hrp.CFrame = best.CFrame + Vector3.new(0,5,0) end
 end })
-Tabs.Move:AddButton({ Title = "TP to Lobby", Callback = function()
+WalkSec:Button({ Name = "Teleport to Lobby"; Callback = function()
     local hrp = HRP(); if not hrp then return end
     for _,o in ipairs(workspace:GetDescendants()) do
         if o:IsA("SpawnLocation") and string.find(tostring(o:GetFullName()), "Lobby") then
-            hrp.CFrame=o.CFrame+Vector3.new(0,5,0); break
+            hrp.CFrame = o.CFrame + Vector3.new(0,5,0); break
         end
     end
 end })
 
-Tabs.Troll:AddButton({ Title = "Fling Nearest", Callback = function() flingNearest() end })
-Tabs.Troll:AddButton({ Title = "Fling All", Callback = function() flingAll() end })
-Tabs.Troll:AddButton({ Title = "Fling Murderer", Callback = function()
+-- ============================================================
+-- TROLL
+-- ============================================================
+local FlingSec = Troll:Section({ Name = "Fling"; Side = "Left"; Icon = "wind" })
+local TPSec = Troll:Section({ Name = "Teleport"; Side = "Right"; Icon = "pin" })
+
+FlingSec:Button({ Name = "Fling Nearest"; Callback = function() flingNearest() end })
+FlingSec:Button({ Name = "Fling All"; Callback = function() flingAll() end })
+FlingSec:Button({ Name = "Fling Murderer"; Callback = function()
     for _,p in ipairs(Players:GetPlayers()) do
         if p~=LP and alive(p) and cachedRole(p)=="m" then flingTarget(p); return end
     end
 end })
-Tabs.Troll:AddButton({ Title = "Fling Sheriff", Callback = function()
+FlingSec:Button({ Name = "Fling Sheriff"; Callback = function()
     for _,p in ipairs(Players:GetPlayers()) do
         if p~=LP and alive(p) and cachedRole(p)=="s" then flingTarget(p); return end
     end
 end })
-Tabs.Troll:AddButton({ Title = "Stop Troll", Callback = function() stopTroll() end })
-Tabs.Troll:AddButton({ Title = "TP to Murder", Callback = function()
+FlingSec:Button({ Name = "Stop Fling"; Callback = function() stopTroll() end })
+
+TPSec:Button({ Name = "Teleport to Murderer"; Callback = function()
     for _,p in ipairs(Players:GetPlayers()) do
         if p~=LP and alive(p) and cachedRole(p)=="m" then
             local hrp=HRP(); local th=p.Character and p.Character:FindFirstChild("HumanoidRootPart")
@@ -1593,7 +1665,7 @@ Tabs.Troll:AddButton({ Title = "TP to Murder", Callback = function()
         end
     end
 end })
-Tabs.Troll:AddButton({ Title = "TP to Sheriff", Callback = function()
+TPSec:Button({ Name = "Teleport to Sheriff"; Callback = function()
     for _,p in ipairs(Players:GetPlayers()) do
         if p~=LP and alive(p) and cachedRole(p)=="s" then
             local hrp=HRP(); local th=p.Character and p.Character:FindFirstChild("HumanoidRootPart")
@@ -1603,69 +1675,157 @@ Tabs.Troll:AddButton({ Title = "TP to Sheriff", Callback = function()
     end
 end })
 
-addVisual(Tabs.Visuals, "trail", "Neon Trail", mkTrail, clTrail)
-addVisual(Tabs.Visuals, "hat", "China Hat", mkHat, clHat)
-addVisual(Tabs.Visuals, "glow", "Body Glow", mkGlow, clGlow)
-addVisual(Tabs.Visuals, "rainbow", "Rainbow", mkRB, clRB)
-addVisual(Tabs.Visuals, "parts", "Aura Particles", mkParts, clParts)
-addVisual(Tabs.Visuals, "skyDust", "Sky Dust", mkSky, clSky)
-addVisual(Tabs.Visuals, "snow", "Snow Aura", mkSnow, clSnow)
-addVisual(Tabs.Visuals, "bounce", "Bounce Particles", mkBo, clBo)
-addVisual(Tabs.Visuals, "lightning", "Lightning Aura", mkLight, clLight)
-addVisual(Tabs.Visuals, "orbAura", "Orb Aura", mkOrb, clOrb)
-addVisual(Tabs.Visuals, "ghost", "Ghost Trail", mkGhost, clGhost)
-addVisual(Tabs.Visuals, "foot", "Footsteps", mkFoot, clFoot)
-addVisual(Tabs.Visuals, "tracer", "Bullet Tracer (real path)", function() task.spawn(connect_trace_fn) end, disableTracer_fn)
-Tabs.Visuals:AddToggle("heartSky", { Title = "Hearts (Sky)", Default = false })
-Options.heartSky:OnChanged(function(v) skyHeart = v; if fl.skyDust then clSky(); task.spawn(function() task.wait(0.05); mkSky() end) end end)
-Tabs.Visuals:AddToggle("heartBo", { Title = "Hearts (Bounce)", Default = false })
-Options.heartBo:OnChanged(function(v) boHeart = v; if fl.bounce then clBo(); task.spawn(function() task.wait(0.05); mkBo() end) end end)
+-- ============================================================
+-- VISUALS
+-- ============================================================
+local function addVisual(section, key, title, flag, mkFn, clFn)
+    local lbl = section:Label({ Text = title })
+    lbl:Toggle({ State = false; Flag = flag; Callback = function(v)
+        fl[key] = v
+        if v then mkFn() else clFn() end
+    end })
+    lbl:Colorpicker({ Color = FC[key]; Flag = flag .. "Color"; Callback = function(c)
+        FC[key] = c
+        if fl[key] then
+            clFn()
+            task.spawn(function() task.wait(0.05); mkFn() end)
+        end
+    end })
+end
 
-Tabs.Model:AddToggle("headless", { Title = "Headless", Default = false })
-Options.headless:OnChanged(function(v) fl.headless = v; pcall(applySkinAll) end)
-Tabs.Model:AddToggle("korblox", { Title = "Fake Korblox", Default = false })
-Options.korblox:OnChanged(function(v) fl.korblox = v; pcall(applySkinAll) end)
+local CharacterSec = CharacterPage:Section({ Name = "Character"; Side = "Left"; Icon = "user" })
+local ParticlesSec = ParticlesPage:Section({ Name = "Particles"; Side = "Left"; Icon = "sparkles" })
+local EffectsSec   = ParticlesPage:Section({ Name = "Effects"; Side = "Right"; Icon = "zap" })
 
-Tabs.Jump:AddToggle("jumpOn", { Title = "Jump Circles", Default = false })
-Options.jumpOn:OnChanged(function(v) fl.jump=v; if v then mkJump() else clJump() end end)
-Tabs.Jump:AddColorpicker("jumpColor", { Title = "Jump Color", Default = FC.jump })
-Options.jumpColor:OnChanged(function(c) FC.jump = c end)
-Tabs.Jump:AddButton({ Title = "Classic", Callback = function() jStyle="Classic" end })
-Tabs.Jump:AddButton({ Title = "Double Ring", Callback = function() jStyle="Double" end })
-Tabs.Jump:AddButton({ Title = "Triple Ripple", Callback = function() jStyle="Ripple" end })
-Tabs.Jump:AddButton({ Title = "Particle Burst", Callback = function() jStyle="Particles" end })
+addVisual(CharacterSec, "trail",   "Neon Trail",  "TrailVisual",   mkTrail,  clTrail)
+addVisual(CharacterSec, "hat",     "China Hat",   "HatVisual",     mkHat,    clHat)
+addVisual(CharacterSec, "glow",    "Body Glow",   "GlowVisual",    mkGlow,   clGlow)
+addVisual(CharacterSec, "rainbow", "Rainbow Body","RainbowVisual", mkRB,     clRB)
 
-addVisual(Tabs.World, "atmo", "Cyberpunk Atmo", mkAtmo, clAtmo)
-addVisual(Tabs.World, "bloom", "Bloom", mkBloom, clBloom)
-Tabs.World:AddToggle("fb", { Title = "FullBright", Default = false })
-Options.fb:OnChanged(function(v) fl.fb=v; if v then mkFB() else clFB() end end)
-Tabs.World:AddToggle("sky", { Title = "Skybox", Default = false })
-Options.sky:OnChanged(function(v) fl.sky=v; if v then mkSkybox() else clSkybox() end end)
-Tabs.World:AddButton({ Title = "Day", Callback = function() applyTime("Day") end })
-Tabs.World:AddButton({ Title = "Sunset", Callback = function() applyTime("Sunset") end })
-Tabs.World:AddButton({ Title = "Night", Callback = function() applyTime("Night") end })
-Tabs.World:AddButton({ Title = "Cyber", Callback = function() applyTime("Cyber") end })
-Tabs.World:AddToggle("fog", { Title = "Fog", Default = false })
-Options.fog:OnChanged(function(v) fl._fog=v; toggleFog(v) end)
+addVisual(ParticlesSec, "parts",     "Aura Particles",    "AuraVisual",      mkParts, clParts)
+addVisual(ParticlesSec, "skyDust",   "Sky Dust",          "SkyDustVisual",   mkSky,   clSky)
+addVisual(ParticlesSec, "snow",      "Snow Aura",         "SnowVisual",      mkSnow,  clSnow)
+addVisual(ParticlesSec, "bounce",    "Bounce Particles",  "BounceVisual",    mkBo,    clBo)
+addVisual(ParticlesSec, "lightning", "Lightning Aura",    "LightningVisual", mkLight, clLight)
+addVisual(ParticlesSec, "orbAura",   "Orb Aura",          "OrbVisual",       mkOrb,   clOrb)
+addVisual(ParticlesSec, "ghost",     "Ghost Trail",       "GhostVisual",     mkGhost, clGhost)
+addVisual(ParticlesSec, "foot",      "Footsteps",         "FootVisual",      mkFoot,  clFoot)
 
-Tabs.ESP:AddToggle("roleEsp", { Title = "Role ESP", Default = false })
-Options.roleEsp:OnChanged(function(v) fl.esp=v; if v then mkESP() else clESP() end end)
-Tabs.ESP:AddToggle("ghostEsp", { Title = "Ghost ESP", Default = true })
-Options.ghostEsp:OnChanged(function(v) fl.espGhost=v end)
-Tabs.ESP:AddToggle("roleTag", { Title = "Role Tag (text)", Default = false })
-Options.roleTag:OnChanged(function(v)
-    fl.roleTag=v
+addVisual(EffectsSec, "tracer", "Bullet Tracer", "TracerVisual",
+    function() task.spawn(connect_trace_fn) end, disableTracer_fn)
+
+local HeartSky = EffectsSec:Label({ Text = "Hearts (Sky)" })
+HeartSky:Toggle({ State = false; Flag = "HeartSky"; Callback = function(v)
+    skyHeart = v
+    if fl.skyDust then clSky(); task.spawn(function() task.wait(0.05); mkSky() end) end
+end })
+local HeartBo = EffectsSec:Label({ Text = "Hearts (Bounce)" })
+HeartBo:Toggle({ State = false; Flag = "HeartBounce"; Callback = function(v)
+    boHeart = v
+    if fl.bounce then clBo(); task.spawn(function() task.wait(0.05); mkBo() end) end
+end })
+
+-- ============================================================
+-- MODEL
+-- ============================================================
+local ModelSec = Model:Section({ Name = "Character Model"; Side = "Left"; Icon = "user" })
+local HeadlessT = ModelSec:Label({ Text = "Headless" })
+HeadlessT:Toggle({ State = false; Flag = "Headless"; Callback = function(v)
+    fl.headless = v
+    pcall(applySkinAll)
+end })
+local KorbloxT = ModelSec:Label({ Text = "Fake Korblox" })
+KorbloxT:Toggle({ State = false; Flag = "Korblox"; Callback = function(v)
+    fl.korblox = v
+    pcall(applySkinAll)
+end })
+
+-- ============================================================
+-- JUMP
+-- ============================================================
+local JumpSec = Jump:Section({ Name = "Jump Effects"; Side = "Left"; Icon = "arrow-up" })
+local JumpLbl = JumpSec:Label({ Text = "Jump Circles" })
+JumpLbl:Toggle({ State = false; Flag = "JumpEffect"; Callback = function(v)
+    fl.jump = v
+    if v then mkJump() else clJump() end
+end })
+JumpLbl:Colorpicker({ Color = FC.jump; Flag = "JumpColor"; Callback = function(c) FC.jump = c end })
+
+JumpSec:Dropdown({ Name = "Style"; Options = { "Classic", "Double Ring", "Triple Ripple", "Particle Burst" };
+    Value = "Classic"; Flag = "JumpStyle"; Callback = function(v)
+    if v == "Classic" then jStyle = "Classic"
+    elseif v == "Double Ring" then jStyle = "Double"
+    elseif v == "Triple Ripple" then jStyle = "Ripple"
+    elseif v == "Particle Burst" then jStyle = "Particles" end
+end })
+
+-- ============================================================
+-- WORLD
+-- ============================================================
+local ShaderSec = World:Section({ Name = "Shader"; Side = "Left"; Icon = "sun" })
+local TimeSec   = World:Section({ Name = "Time"; Side = "Right"; Icon = "clock" })
+local EnvSec    = World:Section({ Name = "Environment"; Side = "Left"; Icon = "eye" })
+
+addVisual(ShaderSec, "atmo",  "Cyberpunk Atmosphere", "AtmoVisual",  mkAtmo,  clAtmo)
+addVisual(ShaderSec, "bloom", "Bloom",                "BloomVisual", mkBloom, clBloom)
+
+local FBT = ShaderSec:Label({ Text = "Fullbright" })
+FBT:Toggle({ State = false; Flag = "Fullbright"; Callback = function(v)
+    fl.fb = v
+    if v then mkFB() else clFB() end
+end })
+local SkyT = ShaderSec:Label({ Text = "Skybox" })
+SkyT:Toggle({ State = false; Flag = "Skybox"; Callback = function(v)
+    fl.sky = v
+    if v then mkSkybox() else clSkybox() end
+end })
+
+TimeSec:Button({ Name = "Day";    Callback = function() applyTime("Day") end })
+TimeSec:Button({ Name = "Sunset"; Callback = function() applyTime("Sunset") end })
+TimeSec:Button({ Name = "Night";  Callback = function() applyTime("Night") end })
+TimeSec:Button({ Name = "Cyber";  Callback = function() applyTime("Cyber") end })
+
+local FogT = EnvSec:Label({ Text = "Fog" })
+FogT:Toggle({ State = false; Flag = "Fog"; Callback = function(v)
+    fl._fog = v; toggleFog(v)
+end })
+
+-- ============================================================
+-- ESP
+-- ============================================================
+local ESPSec = ESP:Section({ Name = "Player ESP"; Side = "Left"; Icon = "users" })
+local ESPTag = ESP:Section({ Name = "Labels"; Side = "Right"; Icon = "tag" })
+
+local RoleEspT = ESPSec:Label({ Text = "Role ESP" })
+RoleEspT:Toggle({ State = false; Flag = "RoleESP"; Callback = function(v)
+    fl.esp = v
+    if v then mkESP() else clESP() end
+end })
+local GhostEspT = ESPSec:Label({ Text = "Ghost ESP (dead murderers)" })
+GhostEspT:Toggle({ State = true; Flag = "GhostESP"; Callback = function(v) fl.espGhost = v end })
+
+local RoleTagT = ESPTag:Label({ Text = "Role Tag (text above head)" })
+RoleTagT:Toggle({ State = false; Flag = "RoleTagText"; Callback = function(v)
+    fl.roleTag = v
     if not v then for pl in pairs(espTxtTags) do detachRoleTag(pl) end end
-end)
+end })
 
-Tabs.Extra:AddToggle("killLightning", { Title = "Kill Lightning", Default = true })
-Options.killLightning:OnChanged(function(v) killOn=v end)
-Tabs.Extra:AddButton({ Title = "Clear Particles", Callback = function()
+-- ============================================================
+-- EXTRA
+-- ============================================================
+local ExtraSec = Extra:Section({ Name = "Utilities"; Side = "Left"; Icon = "wrench" })
+local KillL = ExtraSec:Label({ Text = "Kill Lightning" })
+KillL:Toggle({ State = true; Flag = "KillLightning"; Callback = function(v) killOn = v end })
+
+ExtraSec:Button({ Name = "Clear All Particles"; Callback = function()
     for _,p in ipairs(workspace:GetDescendants()) do
         if p:IsA("ParticleEmitter") then p:Destroy() end
     end
+    notif("Particles cleared", true)
 end })
-Tabs.Extra:AddParagraph({ Title = "StarWare Compact", Content = "Real tracer path · Fixed wallbang · Fallback aim" })
+
+local About = Extra:Section({ Name = "About"; Side = "Right"; Icon = "info" })
+About:Paragraph({ Title = "StarWare"; Body = "Auto-Aim Edition · Lumen UI" })
 
 -- ============================================================
 -- MAIN LOOP
@@ -1736,17 +1896,17 @@ task.spawn(function()
     if MOVE.spin then startSpin() end
 end)
 
-SaveManager:SetLibrary(Fluent)
-InterfaceManager:SetLibrary(Fluent)
-SaveManager:IgnoreThemeSettings()
-InterfaceManager:SetFolder("StarWare")
-SaveManager:SetFolder("StarWare/Configs")
-InterfaceManager:BuildInterfaceSection(Tabs.Extra)
-SaveManager:BuildConfigSection(Tabs.Extra)
-SaveManager:LoadAutoloadConfig()
+-- ============================================================
+-- CONFIG PAGE
+-- ============================================================
+Lumen:BuildConfigPage(Window)
 
-Fluent:Notify({ Title = "StarWare Compact", Content = "Loaded · Real tracer path", Duration = 3 })
+Lumen.Notify({ Title = "StarWare"; Text = "Loaded successfully"; Type = "Success"; Duration = 3 })
+print("[StarWare × Lumen] ready")
 
+-- ============================================================
+-- UNLOAD
+-- ============================================================
 ADDON.unload = function()
     ADDON.loaded = false
     SA.master=false; KS.enabled=false; KA.on=false
