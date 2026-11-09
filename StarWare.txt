@@ -1,7 +1,7 @@
 --!nocheck
 --!nolint
 -- ============================================================
---  STARWARE × LUMEN (Mobile Fixed + All Features)
+--  STARWARE × LUMEN UI (Mobile Fixed + All Features)
 -- ============================================================
 if getgenv().UN_ADDON and getgenv().UN_ADDON.loaded then
     pcall(function() getgenv().UN_ADDON.unload() end)
@@ -12,21 +12,32 @@ getgenv().UN_ADDON = ADDON
 -- ============================================================
 -- LUMEN UI INITIALIZATION
 -- ============================================================
-local Lumen = loadstring(game:HttpGet("https://raw.githubusercontent.com/chromatiks/Lumen/main/Library.lua"))()
+local success, Lumen = pcall(function()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/chromatiks/Lumen/main/Library.lua"))()
+end)
+
+if not success or not Lumen then
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = "Ошибка",
+        Text = "Не удалось загрузить Lumen UI. Проверь интернет или executor.",
+        Duration = 5
+    })
+    return
+end
+
 Lumen.SetConfigFolder("StarWare")
 Lumen:LoadingScreen({ Title = "StarWare"; Subtitle = "Initializing…"; Duration = 1.5 })
 Lumen.SetWatermark("StarWare", true)
 Lumen.SetKeybindList(true)
 
+-- ВНИМАНИЕ: убираем параметр Size, чтобы Lumen не крашился
 local Window = Lumen:Window({
     Title = "StarWare";
     Footer = "Auto-Aim Edition";
-    -- Уменьшенный размер для мобильных устройств
-    Size = UDim2.fromOffset(550, 400); 
 })
 
 -- ============================================================
--- MOBILE TOGGLE BUTTON
+-- MOBILE TOGGLE BUTTON (Fixed)
 -- ============================================================
 local Players = game:GetService("Players")
 local LP = Players.LocalPlayer
@@ -36,25 +47,50 @@ local sgToggle = Instance.new("ScreenGui")
 sgToggle.Name = "StarWareToggle"
 sgToggle.ResetOnSpawn = false
 sgToggle.DisplayOrder = 1000000
-sgToggle.Parent = PG
+sgToggle.Parent = gethui and gethui() or PG
 
 local btn = Instance.new("TextButton")
 btn.Size = UDim2.new(0, 60, 0, 60)
-btn.Position = UDim2.new(1, -80, 1, -80)
+btn.Position = UDim2.new(0, 20, 0.5, -30)
 btn.BackgroundColor3 = Color3.fromRGB(20, 120, 220)
-btn.TextColor3 = Color3.new(1, 1, 1)
+btn.TextColor3 = Color3.new(1,1,1)
 btn.Text = "★"
 btn.Font = Enum.Font.GothamBlack
 btn.TextSize = 24
 btn.Parent = sgToggle
 Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
 btn.Active = true
-btn.Draggable = true -- Позволяет перетаскивать пальцем
 
--- Имитация нажатия RightShift (стандартная клавиша открытия Lumen)
+-- Делаем кнопку перетаскиваемой
+local dragging, dragInput, dragStart, startPos
+btn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = btn.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+btn.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+game:GetService("UserInputService").InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        btn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- Имитация RightShift для открытия Lumen
 local VIM = game:GetService("VirtualInputManager")
 btn.MouseButton1Click:Connect(function()
-    local ok, err = pcall(function()
+    local ok = pcall(function()
         VIM:SendKeyEvent(true, Enum.KeyCode.RightShift, false, game)
         task.wait(0.05)
         VIM:SendKeyEvent(false, Enum.KeyCode.RightShift, false, game)
@@ -383,7 +419,7 @@ local function resolve()
     local handle = gun and gun:FindFirstChild("Handle")
     local handlePos = handle and handle.Position or muzzle
     
-    -- Wallbang фикс: держим ствол сдвинутым 350мс
+    -- Фикс Wallbang: держим ствол сдвинутым 350мс
     if SA.wb and att and muzzle and rayBlocked(muzzle, root.Position, {c, myChar}) and not anyVisible(c, muzzle) then
         local wbSpot = findWbSpot(root, muzzle, SA.wbDist)
         if wbSpot then
@@ -1527,7 +1563,7 @@ local function killAll()
 end
 
 -- ============================================================
--- PAGES & SECTIONS (LUMEN UI)
+-- LUMEN UI CONFIGURATION
 -- ============================================================
 local Combat  = Window:Page({ Icon = "swords" })
 local Move    = Window:Page({ Icon = "move" })
