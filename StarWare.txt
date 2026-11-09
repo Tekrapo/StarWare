@@ -1,7 +1,7 @@
 --!nocheck
 --!nolint
 -- ============================================================
---  STARWARE × LUMEN
+--  STARWARE × LUMEN (Mobile Fixed + All Features)
 -- ============================================================
 if getgenv().UN_ADDON and getgenv().UN_ADDON.loaded then
     pcall(function() getgenv().UN_ADDON.unload() end)
@@ -10,64 +10,96 @@ local ADDON = { loaded = true }
 getgenv().UN_ADDON = ADDON
 
 -- ============================================================
--- LUMEN UI LIBRARY
+-- LUMEN UI INITIALIZATION
 -- ============================================================
 local Lumen = loadstring(game:HttpGet("https://raw.githubusercontent.com/chromatiks/Lumen/main/Library.lua"))()
-
 Lumen.SetConfigFolder("StarWare")
-Lumen:LoadingScreen({ Title = "StarWare"; Subtitle = "Loading…"; Duration = 1.25 })
+Lumen:LoadingScreen({ Title = "StarWare"; Subtitle = "Initializing…"; Duration = 1.5 })
 Lumen.SetWatermark("StarWare", true)
 Lumen.SetKeybindList(true)
 
 local Window = Lumen:Window({
     Title = "StarWare";
     Footer = "Auto-Aim Edition";
+    -- Уменьшенный размер для мобильных устройств
+    Size = UDim2.fromOffset(550, 400); 
 })
 
 -- ============================================================
--- SERVICES
+-- MOBILE TOGGLE BUTTON
 -- ============================================================
-local Players    = game:GetService("Players")
+local Players = game:GetService("Players")
+local LP = Players.LocalPlayer
+local PG = LP:WaitForChild("PlayerGui")
+
+local sgToggle = Instance.new("ScreenGui")
+sgToggle.Name = "StarWareToggle"
+sgToggle.ResetOnSpawn = false
+sgToggle.DisplayOrder = 1000000
+sgToggle.Parent = PG
+
+local btn = Instance.new("TextButton")
+btn.Size = UDim2.new(0, 60, 0, 60)
+btn.Position = UDim2.new(1, -80, 1, -80)
+btn.BackgroundColor3 = Color3.fromRGB(20, 120, 220)
+btn.TextColor3 = Color3.new(1, 1, 1)
+btn.Text = "★"
+btn.Font = Enum.Font.GothamBlack
+btn.TextSize = 24
+btn.Parent = sgToggle
+Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
+btn.Active = true
+btn.Draggable = true -- Позволяет перетаскивать пальцем
+
+-- Имитация нажатия RightShift (стандартная клавиша открытия Lumen)
+local VIM = game:GetService("VirtualInputManager")
+btn.MouseButton1Click:Connect(function()
+    local ok, err = pcall(function()
+        VIM:SendKeyEvent(true, Enum.KeyCode.RightShift, false, game)
+        task.wait(0.05)
+        VIM:SendKeyEvent(false, Enum.KeyCode.RightShift, false, game)
+    end)
+    if not ok then
+        pcall(function() Window.Enabled = not Window.Enabled end)
+    end
+end)
+
+-- ============================================================
+-- SERVICES & STATE
+-- ============================================================
 local RS         = game:GetService("RunService")
 local Replicated = game:GetService("ReplicatedStorage")
 local Stats      = game:GetService("Stats")
 local UIS        = game:GetService("UserInputService")
 local L          = game:GetService("Lighting")
-local LP         = Players.LocalPlayer
 local Cam        = workspace.CurrentCamera
 
--- ============================================================
--- STATE
--- ============================================================
-local SA = {
-    master = false, auto = true, predMs = 100, part = "Torso",
-    wb = true, wbDist = 30, ping = 100, jitter = 0, targetDist = 0
-}
+local SA = { master=false, auto=true, predMs=100, part="Torso", wb=true, wbDist=30, ping=100, jitter=0, targetDist=0 }
 local SA_hist = {}
 local pingHistory = {}
-local KS = { enabled = false }
-local KA = { on = false, dist = 30, last = 0 }
-local TRACE = { on = false, conn = nil }
+local KS = { enabled=false }
+local KA = { on=false, dist=30, last=0 }
+local TRACE = { on=false, conn=nil }
 local autograb_on = false
 local grab_round_mod = nil
 local grab_desc_conn = nil
 
 local MOVE = {
-    speedOn = false, speed = 50, jumpOn = false, jump = 50,
-    infJump = false, noclip = false, fly = false, flySpeed = 60, fg = nil, fv = nil,
-    gravOn = false, grav = 196.2, spin = false, spinSpeed = 720
+    speedOn=false, speed=50, jumpOn=false, jump=50,
+    infJump=false, noclip=false, fly=false, flySpeed=60, fg=nil, fv=nil,
+    gravOn=false, grav=196.2, spin=false, spinSpeed=720
 }
-local moveConns = { infJump = nil, noclip = nil, nc = {} }
+local moveConns = { infJump=nil, noclip=nil, nc={} }
 local flyConn, spinConn
 
-local TROLL = { flinging = false }
+local TROLL = { flinging=false }
 
 local fl = {
-    trail = false, parts = false, hat = false, foot = false, rainbow = false,
-    esp = false, espGhost = true, tracer = false, atmo = false, jump = false,
-    bounce = false, lightning = false, orbAura = false, glow = false,
-    snow = false, ghost = false, skyDust = false, bloom = false, fb = false,
-    sky = false, _fog = false, headless = false, korblox = false, roleTag = false
+    trail=false, parts=false, hat=false, foot=false, rainbow=false,
+    esp=false, espGhost=true, tracer=false, atmo=false, jump=false,
+    bounce=false, lightning=false, orbAura=false, glow=false,
+    snow=false, ghost=false, skyDust=false, bloom=false, fb=false,
+    sky=false, _fog=false, headless=false, korblox=false, roleTag=false
 }
 
 local FC = {}
@@ -146,7 +178,7 @@ local function cachedRole(pl)
 end
 
 -- ============================================================
--- TARGETING
+-- TARGETING & PING
 -- ============================================================
 local rp = RaycastParams.new()
 rp.FilterType = Enum.RaycastFilterType.Exclude
@@ -189,9 +221,6 @@ nearest_player = function()
     return best
 end
 
--- ============================================================
--- PING + AUTO-CONFIG
--- ============================================================
 local function getPing()
     local ok, ms = pcall(function() return Stats.Network.ServerStatsItem["Data Ping"]:GetValue() end)
     return (ok and type(ms)=="number" and ms>0) and ms or 100
@@ -227,7 +256,7 @@ task.spawn(function()
 end)
 
 -- ============================================================
--- VELOCITY HISTORY
+-- VELOCITY
 -- ============================================================
 task.spawn(function()
     while ADDON.loaded do
@@ -257,7 +286,7 @@ local function getVelocity(root)
 end
 
 -- ============================================================
--- WALLBANG HELPERS
+-- WALLBANG
 -- ============================================================
 local function rayBlocked(a,b,ignore)
     local list = { workspace.CurrentCamera }
@@ -306,7 +335,7 @@ local function findWbSpot(mRoot, muzzle, maxDist)
 end
 
 -- ============================================================
--- WEAPON HOOK
+-- WEAPON HOOK (Fixed Wallbang & Aim)
 -- ============================================================
 local WSH = {}
 get_ws_fn = function()
@@ -335,6 +364,7 @@ local function resolve()
     if not c then return nil end
     local root = c:FindFirstChild("HumanoidRootPart")
     if not root then return nil end
+    
     local vel = getVelocity(root)
     local lead = SA.predMs / 1000
     local hum2 = c:FindFirstChildOfClass("Humanoid")
@@ -344,6 +374,7 @@ local function resolve()
         dy = vy * lead - 0.5 * workspace.Gravity * lead * lead
     end
     local off = Vector3.new(vel.X*lead, dy, vel.Z*lead)
+    
     local myChar = LP.Character
     local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
     local att = myRoot and myRoot:FindFirstChild("GunRaycastAttachment")
@@ -351,7 +382,8 @@ local function resolve()
     local gun = myChar and myChar:FindFirstChild("Gun")
     local handle = gun and gun:FindFirstChild("Handle")
     local handlePos = handle and handle.Position or muzzle
-    -- FIX 1: 350ms hold for wallbang
+    
+    -- Wallbang фикс: держим ствол сдвинутым 350мс
     if SA.wb and att and muzzle and rayBlocked(muzzle, root.Position, {c, myChar}) and not anyVisible(c, muzzle) then
         local wbSpot = findWbSpot(root, muzzle, SA.wbDist)
         if wbSpot then
@@ -364,6 +396,7 @@ local function resolve()
             muzzle = wbSpot
         end
     end
+    
     local order = SA.part=="Head" and { "Head", "UpperTorso", "Torso", "HumanoidRootPart" } or { "UpperTorso", "Torso", "LowerTorso", "HumanoidRootPart", "Head" }
     local fallback
     rp.FilterDescendantsInstances = { myChar, workspace.CurrentCamera }
@@ -383,6 +416,7 @@ local function resolve()
         end
     end
     result = result or fallback or (root.Position + off)
+    
     WSH.lastShot = {
         handle = handlePos,
         from   = muzzle,
@@ -391,6 +425,7 @@ local function resolve()
     }
     return result
 end
+
 install_hooks = function()
     local m = get_ws_fn(); if not m then return end
     pcall(function() setreadonly(m,false) end)
@@ -417,6 +452,7 @@ install_hooks = function()
         end
     end
 end
+
 getgenv().KNIFE_AIM_RESOLVE = function()
     if not KS.enabled then return nil end
     local c = LP.Character
@@ -428,7 +464,7 @@ getgenv().KNIFE_AIM_RESOLVE = function()
     return CFrame.new(part.Position + vel)
 end
 
--- FIX 2: fallback for no shift-lock
+-- Fallback для аима без Shift-лока (через прямой remote)
 local function findGunRemote(gun)
     local kl = gun:FindFirstChild("KnifeLocal")
     local cb = kl and kl:FindFirstChild("CreateBeam")
@@ -474,7 +510,7 @@ task.spawn(function()
 end)
 
 -- ============================================================
--- KILL AURA
+-- KILL AURA & AUTO GUN
 -- ============================================================
 ka_tick = function()
     if not KA.on then return end
@@ -510,9 +546,6 @@ ka_tick = function()
     if fired then KA.last = now end
 end
 
--- ============================================================
--- AUTO GUN
--- ============================================================
 local function grab_has_role()
     if not grab_round_mod then
         local ok,m = pcall(function() return require(Replicated:WaitForChild("Modules"):WaitForChild("CurrentRoundClient")) end)
@@ -552,7 +585,7 @@ local function grab_desc_stop()
 end
 
 -- ============================================================
--- TRACER (real path)
+-- TRACER (Real Path)
 -- ============================================================
 local function to_pos(v)
     if typeof(v)=="Vector3" then return v end
@@ -597,10 +630,12 @@ enableTracer_fn = function()
         if not fl.tracer then return end
         local c = LP.Character; if not c then return end
         if typeof(gun) ~= "Instance" or not gun:IsDescendantOf(c) then return end
+        
         local handle = gun:FindFirstChild("Handle")
         local handlePos = handle and handle.Position
         local shot = WSH.lastShot
         local recent = shot and (os.clock() - shot.time) < 0.5
+        
         local shotFrom, shotTo, visualFrom
         if recent then
             visualFrom = shot.handle
@@ -611,6 +646,7 @@ enableTracer_fn = function()
             shotFrom   = handlePos
             shotTo     = to_pos(b)
         end
+        
         local bPos = to_pos(b)
         local finalTo
         if bPos and shotFrom then
@@ -621,6 +657,7 @@ enableTracer_fn = function()
         end
         finalTo = finalTo or shotTo or bPos
         if not (visualFrom and shotFrom and finalTo) then return end
+        
         local wasWb = (shotFrom - visualFrom).Magnitude > 2
         drawBeam(shotFrom, finalTo, FC.tracer, false)
         if wasWb then drawBeam(visualFrom, shotFrom, FC.tracer, true) end
@@ -1299,7 +1336,7 @@ local function updateRoleTags()
 end
 
 -- ============================================================
--- JUMP
+-- JUMP & KILL LIGHTNING
 -- ============================================================
 local function mkJump()
     if jumpC then jumpC:Disconnect() end
@@ -1352,9 +1389,6 @@ local function mkJump()
 end
 local function clJump() if jumpC then jumpC:Disconnect(); jumpC=nil end end
 
--- ============================================================
--- KILL LIGHTNING
--- ============================================================
 local function killLightning(pos)
     local bm=Instance.new("Part")
     bm.Name="sKl"; bm.Size=Vector3.new(1.5,80,1.5)
@@ -1493,7 +1527,7 @@ local function killAll()
 end
 
 -- ============================================================
--- PAGES & SUBPAGES
+-- PAGES & SECTIONS (LUMEN UI)
 -- ============================================================
 local Combat  = Window:Page({ Icon = "swords" })
 local Move    = Window:Page({ Icon = "move" })
@@ -1510,26 +1544,24 @@ local MovementPage = Move:SubPage({ Name = "Movement" })
 local CharacterPage = Visuals:SubPage({ Name = "Character" })
 local ParticlesPage = Visuals:SubPage({ Name = "Particles" })
 
--- ============================================================
--- COMBAT → AIMBOT
--- ============================================================
+-- COMBAT
 local AimMain = AimbotPage:Section({ Name = "Main"; Side = "Left"; Icon = "crosshair" })
 local AimAdv  = AimbotPage:Section({ Name = "Advanced"; Side = "Left"; Icon = "sliders" })
 local AimSec  = AimbotPage:Section({ Name = "Kill Aura"; Side = "Right"; Icon = "target" })
 local AimGun  = AimbotPage:Section({ Name = "Gun"; Side = "Right"; Icon = "crosshair" })
 
-local MasterAim = AimMain:Label({ Text = "Master Aim" })
+local MasterAim = AimMain:Label({ Text = "Enable Aim" })
 MasterAim:Toggle({ State = false; Flag = "MasterAim"; Callback = function(v)
     SA.master = v
     if v then pcall(install_hooks) end
-    notif("Master Aim", v)
+    notif("Enable Aim", v)
 end })
 
-local AutoCfg = AimMain:Label({ Text = "Auto Configuration" })
+local AutoCfg = AimMain:Label({ Text = "Auto Config" })
 AutoCfg:Toggle({ State = true; Flag = "AutoConfig"; Callback = function(v) SA.auto = v end })
 
-local AimPart = AimMain:Dropdown({
-    Name = "Aim Target";
+AimMain:Dropdown({
+    Name = "Target part";
     Options = { "Torso", "Head" };
     Value = "Torso";
     Flag = "AimPart";
@@ -1548,12 +1580,12 @@ KnifeSilent:Toggle({ State = false; Flag = "KnifeSilent"; Callback = function(v)
 local KillAuraT = AimSec:Label({ Text = "Kill Aura" })
 KillAuraT:Toggle({ State = false; Flag = "KillAura"; Callback = function(v) KA.on = v end })
 
-AimSec:Slider({ Name = "Kill Aura Radius"; Suffix = " studs"; Value = 30; Min = 5; Max = 150; Increment = 1;
+AimSec:Slider({ Name = "Radius"; Suffix = " studs"; Value = 30; Min = 5; Max = 150; Increment = 1;
     Flag = "KillAuraRadius"; Callback = function(v) KA.dist = v end })
 
 AimSec:Button({ Name = "Kill All"; Callback = function() task.spawn(killAll) end })
 
-local AutoGun = AimGun:Label({ Text = "Auto Grab Gun" })
+local AutoGun = AimGun:Label({ Text = "Auto Gun" })
 AutoGun:Toggle({ State = false; Flag = "AutoGun"; Callback = function(v)
     autograb_on = v
     if v then
@@ -1562,9 +1594,7 @@ AutoGun:Toggle({ State = false; Flag = "AutoGun"; Callback = function(v)
     else grab_desc_stop() end
 end })
 
--- ============================================================
--- MOVE → MOVEMENT
--- ============================================================
+-- MOVE
 local WalkSec = MovementPage:Section({ Name = "Walk"; Side = "Left"; Icon = "user" })
 local FlightSec = MovementPage:Section({ Name = "Flight"; Side = "Right"; Icon = "move" })
 local WorldSec = MovementPage:Section({ Name = "World"; Side = "Right"; Icon = "globe" })
@@ -1636,9 +1666,7 @@ WalkSec:Button({ Name = "Teleport to Lobby"; Callback = function()
     end
 end })
 
--- ============================================================
 -- TROLL
--- ============================================================
 local FlingSec = Troll:Section({ Name = "Fling"; Side = "Left"; Icon = "wind" })
 local TPSec = Troll:Section({ Name = "Teleport"; Side = "Right"; Icon = "pin" })
 
@@ -1675,9 +1703,7 @@ TPSec:Button({ Name = "Teleport to Sheriff"; Callback = function()
     end
 end })
 
--- ============================================================
 -- VISUALS
--- ============================================================
 local function addVisual(section, key, title, flag, mkFn, clFn)
     local lbl = section:Label({ Text = title })
     lbl:Toggle({ State = false; Flag = flag; Callback = function(v)
@@ -1725,9 +1751,7 @@ HeartBo:Toggle({ State = false; Flag = "HeartBounce"; Callback = function(v)
     if fl.bounce then clBo(); task.spawn(function() task.wait(0.05); mkBo() end) end
 end })
 
--- ============================================================
 -- MODEL
--- ============================================================
 local ModelSec = Model:Section({ Name = "Character Model"; Side = "Left"; Icon = "user" })
 local HeadlessT = ModelSec:Label({ Text = "Headless" })
 HeadlessT:Toggle({ State = false; Flag = "Headless"; Callback = function(v)
@@ -1740,9 +1764,7 @@ KorbloxT:Toggle({ State = false; Flag = "Korblox"; Callback = function(v)
     pcall(applySkinAll)
 end })
 
--- ============================================================
 -- JUMP
--- ============================================================
 local JumpSec = Jump:Section({ Name = "Jump Effects"; Side = "Left"; Icon = "arrow-up" })
 local JumpLbl = JumpSec:Label({ Text = "Jump Circles" })
 JumpLbl:Toggle({ State = false; Flag = "JumpEffect"; Callback = function(v)
@@ -1759,9 +1781,7 @@ JumpSec:Dropdown({ Name = "Style"; Options = { "Classic", "Double Ring", "Triple
     elseif v == "Particle Burst" then jStyle = "Particles" end
 end })
 
--- ============================================================
 -- WORLD
--- ============================================================
 local ShaderSec = World:Section({ Name = "Shader"; Side = "Left"; Icon = "sun" })
 local TimeSec   = World:Section({ Name = "Time"; Side = "Right"; Icon = "clock" })
 local EnvSec    = World:Section({ Name = "Environment"; Side = "Left"; Icon = "eye" })
@@ -1790,9 +1810,7 @@ FogT:Toggle({ State = false; Flag = "Fog"; Callback = function(v)
     fl._fog = v; toggleFog(v)
 end })
 
--- ============================================================
 -- ESP
--- ============================================================
 local ESPSec = ESP:Section({ Name = "Player ESP"; Side = "Left"; Icon = "users" })
 local ESPTag = ESP:Section({ Name = "Labels"; Side = "Right"; Icon = "tag" })
 
@@ -1801,23 +1819,21 @@ RoleEspT:Toggle({ State = false; Flag = "RoleESP"; Callback = function(v)
     fl.esp = v
     if v then mkESP() else clESP() end
 end })
-local GhostEspT = ESPSec:Label({ Text = "Ghost ESP (dead murderers)" })
+local GhostEspT = ESPSec:Label({ Text = "Ghost ESP" })
 GhostEspT:Toggle({ State = true; Flag = "GhostESP"; Callback = function(v) fl.espGhost = v end })
 
-local RoleTagT = ESPTag:Label({ Text = "Role Tag (text above head)" })
+local RoleTagT = ESPTag:Label({ Text = "Role Tag (text)" })
 RoleTagT:Toggle({ State = false; Flag = "RoleTagText"; Callback = function(v)
     fl.roleTag = v
     if not v then for pl in pairs(espTxtTags) do detachRoleTag(pl) end end
 end })
 
--- ============================================================
 -- EXTRA
--- ============================================================
 local ExtraSec = Extra:Section({ Name = "Utilities"; Side = "Left"; Icon = "wrench" })
 local KillL = ExtraSec:Label({ Text = "Kill Lightning" })
 KillL:Toggle({ State = true; Flag = "KillLightning"; Callback = function(v) killOn = v end })
 
-ExtraSec:Button({ Name = "Clear All Particles"; Callback = function()
+ExtraSec:Button({ Name = "Clear Particles"; Callback = function()
     for _,p in ipairs(workspace:GetDescendants()) do
         if p:IsA("ParticleEmitter") then p:Destroy() end
     end
@@ -1933,6 +1949,7 @@ ADDON.unload = function()
         if WSH.om then pcall(function() m.GetMouseTargetCFrame = WSH.om end) end
         if WSH.os then pcall(function() m.GetTargetPosition = WSH.os end) end
     end
+    pcall(function() sgToggle:Destroy() end)
     pcall(function() Window:Destroy() end)
     getgenv().UN_ADDON = nil
 end
